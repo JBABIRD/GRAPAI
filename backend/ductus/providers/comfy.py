@@ -317,7 +317,7 @@ class ComfyInpaint(ComfyProvider):
         work = image.resize((size["width"], size["height"]), Image.LANCZOS)
         m = hole.resize(work.size, Image.BILINEAR).point(lambda v: 255 if v > 127 else 0)
         if grow > 1:
-            m = m.filter(ImageFilter.MaxFilter(grow | 1))
+            m = imaging.dilate(m, grow // 2)
         soft = m.filter(ImageFilter.GaussianBlur(blur)) if blur > 0 else m
         # LoadImageMask reads the red channel: the mask must go up as RGB, not L.
         img_name = self.client.upload_image(work, "image")
@@ -387,7 +387,12 @@ class ComfyOutpaint(ComfyInpaint):
         canvas.paste(src, (left, top))
         hole = Image.new("L", canvas.size, 255)
         hole.paste(0, (left, top, left + src.width, top + src.height))
-        outs = self.inpaint(job, canvas, hole, prompts.outpaint_prompt(job.params), grow=2 * 24 + 1, blur=10)
+        # Wide, soft join (96 px overlap, 48 px blur at working size): a narrow one left a visible box
+        # where the new sky's blue differed slightly from the original's.
+        outs = self.inpaint(job, canvas, hole, prompts.outpaint_prompt(job.params), grow=2 * 96 + 1, blur=48)
+        scale = canvas.width / work_w
+        original_area = ImageOps.invert(hole)
+        outs = [imaging.match_seam_tone(o, original_area, band=int(40 * scale), gap=int(140 * scale)) for o in outs]
         # Reference = the padded canvas. Tested: the unpadded original as reference duplicated the
         # subject or left a sky rectangle; the scene description is what fixes weak fills.
         return [Output(image=o, meta={"seed": job.seed()}) for o in outs]

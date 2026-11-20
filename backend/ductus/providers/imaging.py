@@ -257,3 +257,65 @@ def fill_enclosed(mask: Image.Image, gap: int = 7) -> Image.Image:
     ImageDraw.floodfill(pad, (0, 0), 128)  # everything reachable from outside
     inside = pad.crop((1, 1, w + 1, h + 1)).point(lambda v: 255 if v == 0 else 0)
     return ImageChops.lighter(m, inside)
+
+
+def match_seam_tone(result: Image.Image, original_area: Image.Image, band: int = 40, gap: int = 32) -> Image.Image:
+    """Remove a tone step between an original region and generated surroundings.
+
+    Compares the original just inside its border with the generated pixels just outside it (past the
+    `gap` where the two were blended), extends that low-frequency difference over the generated area
+    and adds it there, so the new sky or floor meets the original at the same brightness and colour.
+    `original_area` is white where the original pixels are.
+    """
+    full = result.convert("RGB")
+    if max(full.size) > 640:
+        # The correction is low-frequency: compute it small, apply it at full size.
+        k = 640 / max(full.size)
+        small = (max(1, round(full.width * k)), max(1, round(full.height * k)))
+        area_s = original_area.convert("L").resize(small, Image.BILINEAR)
+        corrected = match_seam_tone(full.resize(small, Image.BOX), area_s,
+                                    max(4, round(band * k)), max(2, round(gap * k)))
+        delta = (np.asarray(corrected, dtype=np.float32) - np.asarray(full.resize(small, Image.BOX), dtype=np.float32))
+        up = np.stack([np.asarray(Image.fromarray(delta[..., c]).resize(full.size, Image.BILINEAR)) for c in range(3)], -1)
+        new_area = np.asarray(original_area.convert("L"), dtype=np.uint8) <= 127
+        out = np.asarray(full, dtype=np.float32).copy()
+        out[new_area] += up[new_area]
+        return to_pil(out)
+    img = np.asarray(full, dtype=np.float32)
+    orig = np.asarray(original_area.convert("L"), dtype=np.uint8) > 127
+    o_img = Image.fromarray((orig * 255).astype(np.uint8))
+    n_img = Image.fromarray(((~orig) * 255).astype(np.uint8))
+    inner = orig & (np.asarray(dilate(n_img, band)) > 127)
+    near = np.asarray(dilate(o_img, gap + band)) > 127
+    skip = np.asarray(dilate(o_img, gap)) > 127
+    outer = near & ~skip
+    if not inner.any() or not outer.any():
+        return result
+
+    r = 2 * band + gap
+
+    def local_mean(sel: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        w = sel.astype(np.float32)
+        num = _box_blur(_box_blur(img * w[..., None], r), r)
+        den = _box_blur(_box_blur(w, r), r)
+        return num / np.maximum(den, 1e-6)[..., None], den
+
+    a, da = local_mean(inner)
+    b, db = local_mean(outer)
+    valid = (da > 0.02) & (db > 0.02)
+    diff = np.where(valid[..., None], a - b, 0.0)
+    hole = Image.fromarray(np.where(valid, 0, 255).astype(np.uint8))
+    field = np.asarray(fill_holes(to_pil(np.clip(diff + 128, 0, 255)), hole), dtype=np.float32) - 128
+    new_area = ~orig
+    out = img.copy()
+    out[new_area] += field[new_area]
+    return to_pil(out)
+
+
+def dilate(mask: Image.Image, radius: int) -> Image.Image:
+    """Grow the white area by `radius` px (square), fast for any radius."""
+    if radius < 1:
+        return mask.convert("L")
+    m = (np.asarray(mask.convert("L"), dtype=np.float32) > 127).astype(np.float32)
+    grown = _box_blur(m, radius) > 1e-4
+    return Image.fromarray((grown * 255).astype(np.uint8))
