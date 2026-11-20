@@ -39,7 +39,11 @@ class BiRefNetRemoveBg(Provider):
                 from transformers import AutoModelForImageSegmentation
 
                 m = AutoModelForImageSegmentation.from_pretrained(settings.bg_model, trust_remote_code=True)
-                m.to(_device()).eval()
+                dev = _device()
+                # Recent transformers keeps the checkpoint's fp16 weights; CPU needs fp32.
+                if dev.type == "cpu":
+                    m = m.float()
+                m.to(dev).eval()
                 BiRefNetRemoveBg._model = m
         return BiRefNetRemoveBg._model
 
@@ -54,10 +58,11 @@ class BiRefNetRemoveBg(Provider):
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
         ])
-        x = tf(src).unsqueeze(0).to(next(model.parameters()).device)
+        p = next(model.parameters())
+        x = tf(src).unsqueeze(0).to(device=p.device, dtype=p.dtype)
         job.progress(0.3, "segmenting")
         with torch.no_grad():
-            pred = model(x)[-1].sigmoid().cpu()[0].squeeze()
+            pred = model(x)[-1].sigmoid().float().cpu()[0].squeeze()
         alpha = transforms.functional.to_pil_image(pred).resize(src.size, Image.LANCZOS)
         out = src.copy()
         out.putalpha(alpha)
