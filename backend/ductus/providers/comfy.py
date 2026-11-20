@@ -23,7 +23,7 @@ from typing import Any, Callable
 
 import httpx
 import numpy as np
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 from ..config import settings
 from ..workflows import ASPECTS
@@ -455,19 +455,37 @@ class ComfyEnvSwap(ComfyInpaint):
         env = imaging.flatten(job.images["environment"])
         alpha = product_alpha(job, src)
         product, alpha = place_product(src, alpha, float(job.params.get("size", 100)) / 100,
-                                       str(job.params.get("placement", "keep")))
+                                       str(job.params.get("placement", "keep")),
+                                       float(job.params.get("ground", 90)) / 100)
         # Start from a heavily blurred environment (the sharp one is image 2): with a sharp start klein just
         # kept the reference and ignored the description; the blur lets it reshape the scene around the product.
         mp = float(load_template(self.template_name(job), self.target(job)[1]).get("_meta", {}).get("megapixels", 1.0))
         scale = src.width / _size_for(src.size, mp)["width"]
         backdrop = imaging.cover(env, src.size).filter(ImageFilter.GaussianBlur(40 * scale))
+        backdrop = contact_shadow_prior(backdrop, alpha)
         start = Image.composite(product, backdrop, alpha)
         hole = alpha.point(lambda v: 0 if v > 127 else 255)  # everything that isn't the product
         outs = self.inpaint(job, start, hole, prompts.envswap_prompt(job.params), grow=9, blur=6, ref1=env)
         return [Output(image=o, meta={"seed": job.seed()}) for o in outs]
 
 
-def place_product(src: Image.Image, alpha: Image.Image, size: float, placement: str) -> tuple[Image.Image, Image.Image]:
+def contact_shadow_prior(img: Image.Image, alpha: Image.Image) -> Image.Image:
+    """Darken a soft ellipse under the product so klein grounds it with a contact shadow (laptop test:
+    visible shadow under the drill and the car, none without it)."""
+    box = alpha.point(lambda v: 255 if v > 127 else 0).getbbox()
+    if not box:
+        return img
+    x0, y0, x1, y1 = box
+    h = y1 - y0
+    shadow = Image.new("L", img.size, 0)
+    ImageDraw.Draw(shadow).ellipse((x0, y1 - 0.05 * h, x1, y1 + 0.07 * h), fill=150)
+    shadow = shadow.filter(ImageFilter.GaussianBlur(max(6, 0.03 * h)))
+    k = 1 - 0.6 * np.asarray(shadow, dtype=np.float32)[..., None] / 255
+    return Image.fromarray(np.clip(np.asarray(img.convert("RGB"), dtype=np.float32) * k, 0, 255).astype(np.uint8))
+
+
+def place_product(src: Image.Image, alpha: Image.Image, size: float, placement: str,
+                  ground: float = 0.9) -> tuple[Image.Image, Image.Image]:
     """Rescale the cut-out (size < 1 shrinks it about its base) and optionally stand it bottom-centre."""
     box = alpha.point(lambda v: 255 if v > 127 else 0).getbbox()
     if not box or (size >= 0.999 and placement == "keep"):
@@ -478,7 +496,7 @@ def place_product(src: Image.Image, alpha: Image.Image, size: float, placement: 
     piece = src.crop(box).resize((nw, nh), Image.LANCZOS)
     mask = alpha.crop(box).resize((nw, nh), Image.LANCZOS)
     if placement == "ground":
-        cx, base = src.width / 2, src.height * 0.9
+        cx, base = src.width / 2, src.height * ground
     else:
         cx, base = (x0 + x1) / 2, y1  # keep its footprint where it was
     px, py = round(cx - nw / 2), round(min(base, src.height) - nh)

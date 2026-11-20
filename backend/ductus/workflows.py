@@ -169,8 +169,11 @@ WORKFLOWS: dict[str, Workflow] = {
             params=[
                 ParamSpec(name="what", kind="text", label="What is it? (e.g. electric SUV)", default=""),
                 ParamSpec(name="prompt", kind="text", label="Describe the setting (recommended)", default=""),
-                ParamSpec(name="size", kind="select", label="Product size", default=100, options=[100, 80, 60, 45]),
+                ParamSpec(name="size", kind="select", label="Product size", default=100,
+                          options=[100, 80, 60, 45, 30, 20]),
                 ParamSpec(name="placement", kind="select", label="Placement", default="keep", options=["keep", "ground"]),
+                ParamSpec(name="ground", kind="number", label="Ground line (% down, for Stand on ground)", default=90,
+                          min=30, max=98, step=1),
                 _MODE, _count(2), _SEED,
             ],
             model="BiRefNet + FLUX.2 klein 4B",
