@@ -1,0 +1,618 @@
+import {
+  Background,
+  BackgroundVariant,
+  Controls,
+  MiniMap,
+  ReactFlow,
+  SelectionMode,
+  addEdge,
+  useEdgesState,
+  useNodesState,
+  useReactFlow,
+  type Connection,
+  type Edge,
+  type IsValidConnection,
+  type NodeTypes,
+  type OnConnect,
+  type OnNodeDrag,
+} from "@xyflow/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api, canvasToBlob } from "../api";
+import ImageEditor, { type EditorResult } from "../editor/ImageEditor";
+import type {
+  Asset,
+  BoardDoc,
+  BoardNode,
+  Catalogue,
+  ImageNodeT,
+  JobOutput,
+  NoteNodeT,
+  SectionNodeT,
+  ToolData,
+  ToolNodeT,
+  VideoNodeT,
+} from "../types";
+import { BoardContext, type BoardActions } from "./BoardContext";
+import ImageNode from "./nodes/ImageNode";
+import NoteNode from "./nodes/NoteNode";
+import SectionNode from "./nodes/SectionNode";
+import ToolNode from "./nodes/ToolNode";
+import VideoNode from "./nodes/VideoNode";
+import Toolbar from "./Toolbar";
+import { IMAGE_W, TOOL_W, fitSize, freeSpot, inside, nodeSize, uid } from "./util";
+
+const nodeTypes: NodeTypes = { image: ImageNode, video: VideoNode, note: NoteNode, section: SectionNode, tool: ToolNode };
+
+type Props = {
+  doc: BoardDoc;
+  catalogue: Catalogue;
+  onSaveState: (s: "saved" | "saving" | "error") => void;
+};
+
+type EditorTarget = { nodeId: string | null; url: string | null; maskUrl: string | null; width: number; height: number; at?: { x: number; y: number } };
+
+const IMAGE_INPUT_NODES = new Set(["image"]);
+
+function prepare(nodes: BoardNode[]): BoardNode[] {
+  return nodes.map((n) => (n.type === "section" ? { ...n, zIndex: -1 } : n));
+}
+
+export default function Board({ doc, catalogue, onSaveState }: Props) {
+  const rf = useReactFlow();
+  const [nodes, setNodes, onNodesChange] = useNodesState<BoardNode>(prepare(doc.nodes));
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(doc.edges);
+  const [editor, setEditor] = useState<EditorTarget | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  nodesRef.current = nodes;
+  edgesRef.current = edges;
+  const polls = useRef(new Set<string>());
+
+  const workflows = useMemo(() => new Map(catalogue.workflows.map((w) => [w.id, w])), [catalogue]);
+
+  const flash = useCallback((msg: string) => {
+    setToast(msg);
+    window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 3500);
+  }, []);
+
+  const updateNodeData = useCallback(
+    (id: string, patch: Record<string, unknown>) =>
+      setNodes((ns) => ns.map((n) => (n.id === id ? ({ ...n, data: { ...n.data, ...patch } } as BoardNode) : n))),
+    [setNodes],
+  );
+
+  // ---------- placing things on the board ----------
+  const centre = useCallback(() => {
+    const el = document.querySelector(".react-flow") as HTMLElement | null;
+    const r = el?.getBoundingClientRect();
+    return rf.screenToFlowPosition({ x: (r?.left ?? 0) + (r?.width ?? 800) / 2, y: (r?.top ?? 0) + (r?.height ?? 600) / 2 });
+  }, [rf]);
+
+  const imageNode = (asset: Asset, pos: { x: number; y: number }, extra: Partial<ImageNodeT["data"]> = {}): ImageNodeT => {
+    const size = fitSize(asset.width ?? 1024, asset.height ?? 1024);
+    return {
+      id: uid("img"),
+      type: "image",
+      position: pos,
+      width: size.width,
+      height: size.height,
+      data: { assetId: asset.id, url: asset.url, width: asset.width ?? 1024, height: asset.height ?? 1024, ...extra },
+    };
+  };
+
+  const addAssets = useCallback(
+    async (files: File[], at: { x: number; y: number }) => {
+      let x = at.x;
+      for (const f of files) {
+        if (!/^image\/(png|jpeg|webp)$|^video\/mp4$/.test(f.type)) {
+          flash(`Skipped ${f.name}: use PNG, JPEG, WebP or MP4`);
+          continue;
+        }
+        try {
+          const asset = await api.upload(f, f.name);
+          if (asset.mime.startsWith("video/")) {
+            const node: VideoNodeT = {
+              id: uid("vid"),
+              type: "video",
+              position: { x, y: at.y },
+              width: 360,
+              height: 203,
+              data: { assetId: asset.id, url: asset.url, width: 1280, height: 720, title: f.name },
+            };
+            setNodes((ns) => [...ns, node]);
+            x += 400;
+          } else {
+            const node = imageNode(asset, { x, y: at.y }, { title: f.name.replace(/\.\w+$/, "") });
+            setNodes((ns) => [...ns, node]);
+            x += (node.width ?? IMAGE_W) + 40;
+          }
+        } catch (e) {
+          flash(`Upload failed: ${(e as Error).message}`);
+        }
+      }
+    },
+    [flash, setNodes],
+  );
+
+  const placeResults = useCallback(
+    (toolId: string, outputs: JobOutput[], caption: string) => {
+      const ns = nodesRef.current;
+      const tool = ns.find((n) => n.id === toolId);
+      if (!tool) return;
+      const toolSize = nodeSize(tool);
+      const prior = edgesRef.current
+        .filter((e) => e.source === toolId)
+        .map((e) => ns.find((n) => n.id === e.target))
+        .filter(Boolean) as BoardNode[];
+      const x0 = tool.position.x + toolSize.w + 90;
+      let y = prior.length ? Math.max(...prior.map((n) => n.position.y + nodeSize(n).h)) + 40 : tool.position.y;
+      const cols = outputs.length > 2 ? 2 : outputs.length;
+      const created: BoardNode[] = [];
+      let rowH = 0;
+      outputs.forEach((o, i) => {
+        const col = i % cols;
+        if (i > 0 && col === 0) {
+          y += rowH + 24;
+          rowH = 0;
+        }
+        const w = o.kind === "video" ? 400 : 260;
+        const size = fitSize(o.asset.width ?? o.poster?.width ?? 16, o.asset.height ?? o.poster?.height ?? 9, w);
+        const pos = freeSpot([...ns, ...created], { x: x0 + col * (w + 24), y }, size.width, size.height + 20);
+        if (pos.y !== y && col === 0) y = pos.y;
+        rowH = Math.max(rowH, size.height + (pos.y - y));
+        if (o.kind === "video") {
+          created.push({
+            id: uid("vid"),
+            type: "video",
+            position: pos,
+            width: size.width,
+            height: size.height,
+            data: {
+              assetId: o.asset.id,
+              url: o.asset.url,
+              posterUrl: o.poster?.url,
+              width: o.poster?.width ?? 1280,
+              height: o.poster?.height ?? 720,
+              caption,
+            },
+          });
+        } else {
+          created.push({ ...imageNode(o.asset, pos, { caption }), width: size.width, height: size.height });
+        }
+      });
+      setNodes((cur) => [...cur, ...created]);
+      setEdges((cur) => [
+        ...cur,
+        ...created.map((n) => ({
+          id: uid("e"),
+          source: toolId,
+          sourceHandle: "out",
+          target: n.id,
+          targetHandle: "in",
+          className: "edge-result",
+        })),
+      ]);
+    },
+    [setEdges, setNodes],
+  );
+
+  // ---------- jobs ----------
+  const poll = useCallback(
+    (toolId: string, jobId: string, caption: string) => {
+      if (polls.current.has(jobId)) return;
+      polls.current.add(jobId);
+      const tick = async () => {
+        try {
+          const job = await api.job(jobId);
+          if (job.status === "done") {
+            polls.current.delete(jobId);
+            const tool = nodesRef.current.find((n) => n.id === toolId) as ToolNodeT | undefined;
+            updateNodeData(toolId, { status: "done", progress: 1, message: "", jobId: null, runs: (tool?.data.runs ?? 0) + 1 });
+            placeResults(toolId, job.outputs, caption);
+            return;
+          }
+          if (job.status === "error") {
+            polls.current.delete(jobId);
+            updateNodeData(toolId, { status: "error", error: job.error ?? "failed", jobId: null });
+            return;
+          }
+          updateNodeData(toolId, { status: "running", progress: job.progress, message: job.message });
+        } catch (e) {
+          polls.current.delete(jobId);
+          updateNodeData(toolId, { status: "error", error: `Lost track of the job: ${(e as Error).message}`, jobId: null });
+          return;
+        }
+        window.setTimeout(tick, 700);
+      };
+      tick();
+    },
+    [placeResults, updateNodeData],
+  );
+
+  const runTool = useCallback(
+    async (toolId: string) => {
+      const tool = nodesRef.current.find((n) => n.id === toolId) as ToolNodeT | undefined;
+      if (!tool || tool.data.status === "running") return;
+      const wf = workflows.get(tool.data.workflow);
+      if (!wf) return;
+      const inputs: Record<string, string | null> = {};
+      for (const e of edgesRef.current.filter((e) => e.target === toolId)) {
+        const src = nodesRef.current.find((n) => n.id === e.source);
+        if (!src || !e.targetHandle) continue;
+        if (!IMAGE_INPUT_NODES.has(src.type ?? "")) continue;
+        const d = (src as ImageNodeT).data;
+        inputs[e.targetHandle] = d.assetId;
+        if (e.targetHandle === "image" && d.maskAssetId && wf.inputs.some((i) => i.name === "mask")) inputs.mask = d.maskAssetId;
+      }
+      const missing = wf.inputs.filter((i) => i.kind === "image" && i.required && !inputs[i.name]);
+      if (missing.length) {
+        updateNodeData(toolId, { status: "error", error: `Connect an image to ${missing.map((m) => m.label).join(", ")}` });
+        return;
+      }
+      updateNodeData(toolId, { status: "running", progress: 0, message: "queued", error: null });
+      try {
+        const job = await api.submitJob(wf.id, inputs, tool.data.params);
+        updateNodeData(toolId, { jobId: job.id });
+        const prompt = String(tool.data.params.prompt ?? "").trim();
+        poll(toolId, job.id, prompt ? `${wf.name}: ${prompt}` : wf.name);
+      } catch (e) {
+        updateNodeData(toolId, { status: "error", error: (e as Error).message });
+      }
+    },
+    [poll, updateNodeData, workflows],
+  );
+
+  // Resume jobs that were running when the board was last open.
+  useEffect(() => {
+    for (const n of nodesRef.current) {
+      if (n.type === "tool" && n.data.status === "running") {
+        if (n.data.jobId) poll(n.id, n.data.jobId, "");
+        else updateNodeData(n.id, { status: "idle" });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const addTool = useCallback(
+    (workflow: string, pos: { x: number; y: number }, sources: string[] = []) => {
+      const wf = workflows.get(workflow);
+      if (!wf) return null;
+      const params: Record<string, unknown> = {};
+      wf.params.forEach((p) => (params[p.name] = p.default));
+      const tool: ToolNodeT = {
+        id: uid("tool"),
+        type: "tool",
+        position: freeSpot(nodesRef.current, pos, TOOL_W, 200 + wf.inputs.length * 30 + wf.params.length * 40),
+        width: TOOL_W,
+        data: { workflow, params, status: "idle" } satisfies ToolData,
+      };
+      const handles = wf.inputs.filter((i) => i.kind === "image").map((i) => i.name);
+      const newEdges: Edge[] = sources.slice(0, handles.length).map((s, i) => ({
+        id: uid("e"),
+        source: s,
+        sourceHandle: "out",
+        target: tool.id,
+        targetHandle: handles[i],
+      }));
+      setNodes((ns) => [...ns.map((n) => ({ ...n, selected: false })), { ...tool, selected: true }]);
+      setEdges((es) => [...es, ...newEdges]);
+      return tool.id;
+    },
+    [setEdges, setNodes, workflows],
+  );
+
+  const quickAction = useCallback(
+    (nodeId: string, workflow: string) => {
+      const ns = nodesRef.current;
+      const node = ns.find((n) => n.id === nodeId);
+      if (!node) return;
+      // Edit takes extra selected images as references (@2, @3); other tools use just this one.
+      const selected =
+        workflow === "edit" ? ns.filter((n) => n.selected && n.type === "image" && n.id !== nodeId).map((n) => n.id) : [];
+      const size = nodeSize(node);
+      const toolId = addTool(workflow, { x: node.position.x + size.w + 90, y: node.position.y }, [nodeId, ...selected]);
+      const wf = workflows.get(workflow);
+      if (toolId && wf && wf.params.every((p) => p.kind !== "text")) {
+        window.setTimeout(() => runTool(toolId), 80);
+      }
+    },
+    [addTool, runTool, workflows],
+  );
+
+  const deleteNode = useCallback((nodeId: string) => rf.deleteElements({ nodes: [{ id: nodeId }] }), [rf]);
+
+  const openEditor = useCallback((nodeId: string) => {
+    const n = nodesRef.current.find((x) => x.id === nodeId) as ImageNodeT | undefined;
+    if (!n || n.type !== "image") return;
+    setEditor({ nodeId, url: n.data.url, maskUrl: n.data.maskUrl ?? null, width: n.data.width, height: n.data.height });
+  }, []);
+
+  const newSketch = useCallback(() => {
+    const c = centre();
+    setEditor({ nodeId: null, url: null, maskUrl: null, width: 1280, height: 896, at: { x: c.x - 150, y: c.y - 100 } });
+  }, [centre]);
+
+  const saveEditor = useCallback(
+    async (res: EditorResult) => {
+      const target = editor;
+      setEditor(null);
+      if (!target) return;
+      try {
+        const asset = await api.upload(res.image, "sketch.png");
+        let mask: Asset | null | undefined = undefined;
+        if (res.mask === null) mask = null;
+        else if (res.mask) mask = await api.upload(res.mask, "mask.png");
+        const maskPatch =
+          mask === undefined ? {} : { maskAssetId: mask ? mask.id : null, maskUrl: mask ? mask.url : null };
+        if (target.nodeId) {
+          updateNodeData(target.nodeId, { assetId: asset.id, url: asset.url, width: asset.width, height: asset.height, ...maskPatch });
+        } else {
+          const node = imageNode(asset, target.at ?? centre(), { sketch: true, title: "Sketch", ...maskPatch });
+          setNodes((ns) => [...ns.map((n) => ({ ...n, selected: false })), { ...node, selected: true }]);
+        }
+      } catch (e) {
+        flash(`Could not save: ${(e as Error).message}`);
+      }
+    },
+    [centre, editor, flash, setNodes, updateNodeData],
+  );
+
+  const saveVideoFrame = useCallback(
+    async (nodeId: string, time: number) => {
+      const n = nodesRef.current.find((x) => x.id === nodeId) as VideoNodeT | undefined;
+      if (!n) return;
+      try {
+        const v = document.createElement("video");
+        v.crossOrigin = "anonymous";
+        v.muted = true;
+        v.src = n.data.url;
+        await new Promise<void>((ok, fail) => {
+          v.onloadeddata = () => ok();
+          v.onerror = () => fail(new Error("video failed to load"));
+        });
+        v.currentTime = Math.min(time, Math.max(0, v.duration - 0.05));
+        await new Promise<void>((ok) => (v.onseeked = () => ok()));
+        const c = document.createElement("canvas");
+        c.width = v.videoWidth;
+        c.height = v.videoHeight;
+        c.getContext("2d")!.drawImage(v, 0, 0);
+        const asset = await api.upload(await canvasToBlob(c), "frame.png");
+        const size = nodeSize(n);
+        const node = imageNode(asset, { x: n.position.x, y: n.position.y + size.h + 40 }, { caption: `Frame at ${time.toFixed(1)} s` });
+        setNodes((ns) => [...ns, node]);
+        setEdges((es) => [...es, { id: uid("e"), source: nodeId, sourceHandle: null, target: node.id, targetHandle: "in", className: "edge-result" }]);
+      } catch (e) {
+        flash(`Could not grab the frame: ${(e as Error).message}`);
+      }
+    },
+    [flash, setEdges, setNodes],
+  );
+
+  const clearMask = useCallback((nodeId: string) => updateNodeData(nodeId, { maskAssetId: null, maskUrl: null }), [updateNodeData]);
+
+  const actions: BoardActions = useMemo(
+    () => ({
+      catalogue,
+      workflow: (id) => workflows.get(id),
+      presets: catalogue.presets,
+      runTool,
+      updateNodeData,
+      openEditor,
+      quickAction,
+      saveVideoFrame,
+      clearMask,
+      deleteNode,
+    }),
+    [catalogue, workflows, runTool, updateNodeData, openEditor, quickAction, saveVideoFrame, clearMask, deleteNode],
+  );
+
+  // ---------- connections ----------
+  const isValidConnection: IsValidConnection = useCallback((c) => {
+    const target = nodesRef.current.find((n) => n.id === c.target);
+    const source = nodesRef.current.find((n) => n.id === c.source);
+    return target?.type === "tool" && source?.type === "image" && c.source !== c.target && !!c.targetHandle && c.targetHandle !== "out";
+  }, []);
+
+  const onConnect: OnConnect = useCallback(
+    (c: Connection) =>
+      setEdges((es) =>
+        addEdge({ ...c, id: uid("e") }, es.filter((e) => !(e.target === c.target && e.targetHandle === c.targetHandle))),
+      ),
+    [setEdges],
+  );
+
+  // ---------- sections carry their contents ----------
+  const dragGroup = useRef<{ id: string; start: { x: number; y: number }; members: Map<string, { x: number; y: number }> } | null>(null);
+  const onNodeDragStart: OnNodeDrag<BoardNode> = useCallback((_, node) => {
+    if (node.type !== "section") return;
+    const members = new Map<string, { x: number; y: number }>();
+    nodesRef.current.forEach((n) => {
+      if (n.id !== node.id && n.type !== "section" && inside(n, node)) members.set(n.id, { ...n.position });
+    });
+    dragGroup.current = { id: node.id, start: { ...node.position }, members };
+  }, []);
+  const onNodeDrag: OnNodeDrag<BoardNode> = useCallback(
+    (_, node) => {
+      const g = dragGroup.current;
+      if (!g || g.id !== node.id) return;
+      const dx = node.position.x - g.start.x;
+      const dy = node.position.y - g.start.y;
+      setNodes((ns) => ns.map((n) => (g.members.has(n.id) ? { ...n, position: { x: g.members.get(n.id)!.x + dx, y: g.members.get(n.id)!.y + dy } } : n)));
+    },
+    [setNodes],
+  );
+  const onNodeDragStop = useCallback(() => (dragGroup.current = null), []);
+
+  // ---------- adding things ----------
+  const addNote = useCallback(() => {
+    const c = centre();
+    const n: NoteNodeT = { id: uid("note"), type: "note", position: freeSpot(nodesRef.current, { x: c.x - 100, y: c.y - 70 }, 200, 140), width: 200, height: 140, data: { text: "", color: "#fff4b8" } };
+    setNodes((ns) => [...ns, n]);
+  }, [centre, setNodes]);
+
+  const addSection = useCallback(() => {
+    const sel = nodesRef.current.filter((n) => n.selected && n.type !== "section");
+    let box = { x: centre().x - 300, y: centre().y - 200, w: 600, h: 400 };
+    if (sel.length) {
+      const xs = sel.map((n) => n.position.x), ys = sel.map((n) => n.position.y);
+      const xe = sel.map((n) => n.position.x + nodeSize(n).w), ye = sel.map((n) => n.position.y + nodeSize(n).h);
+      box = { x: Math.min(...xs) - 40, y: Math.min(...ys) - 70, w: Math.max(...xe) - Math.min(...xs) + 80, h: Math.max(...ye) - Math.min(...ys) + 110 };
+    }
+    const s: SectionNodeT = { id: uid("sec"), type: "section", position: { x: box.x, y: box.y }, width: box.w, height: box.h, zIndex: -1, data: { title: "Section" } };
+    setNodes((ns) => [s, ...ns]);
+  }, [centre, setNodes]);
+
+  const fileInput = useRef<HTMLInputElement>(null);
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length) addAssets(files, rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+    },
+    [addAssets, rf],
+  );
+
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      if ((e.target as HTMLElement)?.closest("input, textarea")) return;
+      const files = Array.from(e.clipboardData?.files ?? []);
+      if (files.length) {
+        e.preventDefault();
+        addAssets(files, centre());
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest("input, textarea, select") || editor) return;
+      const sel = nodesRef.current.filter((n) => n.selected);
+      if (e.key === "e" && sel[0]?.type === "image") quickAction(sel[0].id, "edit");
+      else if (e.key === "n") addNote();
+      else if (e.key === "s" && !e.metaKey && !e.ctrlKey) addSection();
+      else if (e.key === "d" && !e.metaKey && !e.ctrlKey) newSketch();
+      else if (e.key === "!" || (e.shiftKey && e.code === "Digit1")) rf.fitView({ padding: 0.15, duration: 300 });
+      else if (e.shiftKey && e.code === "Digit2" && sel.length) rf.fitView({ nodes: sel, padding: 0.2, duration: 300 });
+    };
+    window.addEventListener("paste", onPaste);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("paste", onPaste);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [addAssets, addNote, addSection, centre, editor, newSketch, quickAction, rf]);
+
+  // ---------- autosave ----------
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    onSaveState("saving");
+    const t = window.setTimeout(() => {
+      const clean = nodes.map(({ selected: _s, dragging: _d, measured: _m, ...rest }) => rest) as BoardNode[];
+      api
+        .saveBoard({ ...doc, nodes: clean, edges, viewport: rf.getViewport() })
+        .then(() => onSaveState("saved"))
+        .catch(() => onSaveState("error"));
+    }, 800);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, edges]);
+
+  const empty = nodes.length === 0;
+
+  return (
+    <BoardContext.Provider value={actions}>
+      <div className="board" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+        <ReactFlow<BoardNode, Edge>
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          isValidConnection={isValidConnection}
+          onNodeDragStart={onNodeDragStart}
+          onNodeDrag={onNodeDrag}
+          onNodeDragStop={onNodeDragStop}
+          defaultViewport={doc.viewport ?? { x: 0, y: 0, zoom: 1 }}
+          minZoom={0.05}
+          maxZoom={6}
+          panOnScroll
+          zoomOnPinch
+          selectionOnDrag
+          panOnDrag={[1, 2]}
+          selectionMode={SelectionMode.Partial}
+          deleteKeyCode={["Backspace", "Delete"]}
+          multiSelectionKeyCode={["Shift", "Meta", "Control"]}
+          proOptions={{ hideAttribution: true }}
+          defaultEdgeOptions={{ type: "default" }}
+          colorMode="dark"
+        >
+          <Background variant={BackgroundVariant.Dots} gap={24} size={1.4} color="var(--dots)" />
+          <MiniMap pannable zoomable nodeColor={(n) => (n.type === "tool" ? "#ff8a3d" : n.type === "section" ? "#2a2c31" : "#6b7280")} maskColor="rgba(10,10,12,0.6)" />
+          <Controls showInteractive={false} />
+        </ReactFlow>
+        <Toolbar
+          workflows={catalogue.workflows}
+          onSketch={newSketch}
+          onUpload={() => fileInput.current?.click()}
+          onNote={addNote}
+          onSection={addSection}
+          onTool={(w) => {
+            const c = centre();
+            const sel = nodesRef.current.filter((n) => n.selected && n.type === "image");
+            if (sel.length) {
+              const right = Math.max(...sel.map((n) => n.position.x + nodeSize(n).w));
+              addTool(w, { x: right + 90, y: sel[0].position.y }, sel.map((n) => n.id));
+            } else addTool(w, { x: c.x - TOOL_W / 2, y: c.y - 160 });
+          }}
+          onFit={() => rf.fitView({ padding: 0.15, duration: 300 })}
+        />
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,video/mp4"
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            const c = centre();
+            addAssets(files, { x: c.x - 150, y: c.y - 100 });
+          }}
+        />
+        {empty && (
+          <div className="empty-hint">
+            <h2>Start with a sketch, an image or an idea</h2>
+            <div>
+              <button onClick={newSketch}>Draw a sketch</button>
+              <button onClick={() => fileInput.current?.click()}>Upload images</button>
+              <button
+                onClick={() => {
+                  const c = centre();
+                  addTool("create", { x: c.x - TOOL_W / 2, y: c.y - 200 });
+                }}
+              >
+                Create from text
+              </button>
+            </div>
+            <p>Drop or paste images anywhere. Connect images to tool blocks; results land beside the block.</p>
+          </div>
+        )}
+        {toast && <div className="toast">{toast}</div>}
+      </div>
+      {editor && (
+        <ImageEditor
+          src={editor.url}
+          maskSrc={editor.maskUrl}
+          width={editor.width}
+          height={editor.height}
+          onCancel={() => setEditor(null)}
+          onSave={saveEditor}
+        />
+      )}
+    </BoardContext.Provider>
+  );
+}
+
