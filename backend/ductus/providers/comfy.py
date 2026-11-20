@@ -479,8 +479,8 @@ def contact_shadow_prior(img: Image.Image, alpha: Image.Image) -> Image.Image:
     h = y1 - y0
     shadow = Image.new("L", img.size, 0)
     ImageDraw.Draw(shadow).ellipse((x0, y1 - 0.05 * h, x1, y1 + 0.07 * h), fill=150)
-    shadow = shadow.filter(ImageFilter.GaussianBlur(max(6, 0.03 * h)))
-    k = 1 - 0.6 * np.asarray(shadow, dtype=np.float32)[..., None] / 255
+    shadow = shadow.filter(ImageFilter.GaussianBlur(max(8, 0.05 * h)))
+    k = 1 - 0.45 * np.asarray(shadow, dtype=np.float32)[..., None] / 255
     return Image.fromarray(np.clip(np.asarray(img.convert("RGB"), dtype=np.float32) * k, 0, 255).astype(np.uint8))
 
 
