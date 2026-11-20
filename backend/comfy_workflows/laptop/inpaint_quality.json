@@ -1,7 +1,7 @@
 {
   "_meta": {
     "title": "Erase / outpaint quality (laptop, 8 GB)",
-    "model": "FLUX.2 klein Base 4B (Apache-2.0), undistilled: 24 steps, CFG 4",
+    "model": "FLUX.2 klein Base 4B (Apache-2.0), undistilled: 16 steps, CFG 3 (laptop sweep: same as 24/4, ~30% faster)",
     "files": {
       "diffusion_models": "flux-2-klein-base-4b-fp8.safetensors",
       "text_encoders": "qwen_3_4b.safetensors",
@@ -115,7 +115,7 @@
   "32": {
     "class_type": "Flux2Scheduler",
     "inputs": {
-      "steps": 24,
+      "steps": 16,
       "width": "{{width}}",
       "height": "{{height}}"
     }
@@ -257,7 +257,7 @@
         "21",
         0
       ],
-      "cfg": 4.0
+      "cfg": 3.0
     }
   }
 }

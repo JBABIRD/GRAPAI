@@ -346,7 +346,7 @@ class ComfyInpaint(ComfyProvider):
         outs: list[Image.Image] = []
         for i in range(count):
             job.progress(i / count, f"generating {i + 1}/{count}")
-            graph = fill_template(template, {"prompt": prompt, "image": img_name, "mask": mask_name, "reference": ref_name, "negative": prompts.NEGATIVE,
+            graph = fill_template(template, {"prompt": prompt, "image": img_name, "mask": mask_name, "reference": ref_name, "negative": prompts.INPAINT_NEGATIVE,
                                              "seed": seed + i, **size})
             for f in self.client.run(graph, lambda p, m="": job.progress((i + p) / count, m)):
                 if f["filename"].lower().endswith((".png", ".jpg", ".jpeg", ".webp")):

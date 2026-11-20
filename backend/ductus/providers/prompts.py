@@ -11,6 +11,7 @@ VIEW_ELEVATION = {
     "top": "from directly above, top view",
 }
 
+INPAINT_NEGATIVE = ("blurry, smeared, visible seam, border, frame, text, watermark, vehicles, people, buildings")
 NEGATIVE = "blurry, low quality, distorted proportions, extra parts, watermark, text artifacts"
 VIDEO_NEGATIVE = ("static, blurry, distorted, deformed product, changing shape, flicker, low quality, "
                   "watermark, text, morphing")
