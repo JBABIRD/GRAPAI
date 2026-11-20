@@ -7,7 +7,7 @@ import hashlib
 import re
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 COLOR_WORDS: dict[str, tuple[int, int, int]] = {
     "red": (196, 32, 38), "orange": (232, 112, 28), "yellow": (236, 196, 40),
@@ -240,3 +240,20 @@ def blend_outpaint(canvas: Image.Image, generated: Image.Image, hole: Image.Imag
     keep = Image.fromarray((known * 255).astype(np.uint8)).filter(ImageFilter.MinFilter(min(band, 31)))
     keep = feather(keep, band / 2)
     return Image.composite(canvas, corrected, keep)
+
+
+def fill_enclosed(mask: Image.Image, gap: int = 7) -> Image.Image:
+    """Treat a painted outline as 'everything inside it': fill areas the mask encloses.
+
+    Small gaps in the stroke (up to about `gap` px) are bridged first.
+    """
+    from PIL import ImageDraw
+
+    m = mask.convert("L").point(lambda v: 255 if v > 127 else 0)
+    closed = m.filter(ImageFilter.MaxFilter(gap | 1)) if gap > 1 else m
+    w, h = closed.size
+    pad = Image.new("L", (w + 2, h + 2), 0)
+    pad.paste(closed, (1, 1))
+    ImageDraw.floodfill(pad, (0, 0), 128)  # everything reachable from outside
+    inside = pad.crop((1, 1, w + 1, h + 1)).point(lambda v: 255 if v == 0 else 0)
+    return ImageChops.lighter(m, inside)

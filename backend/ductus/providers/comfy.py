@@ -338,7 +338,7 @@ class ComfyErase(ComfyInpaint):
 
     def run(self, job: JobInput) -> list[Output]:
         src = imaging.flatten(job.images["image"])
-        hole = imaging.mask_from_image(job.images["mask"], src.size).point(lambda v: 255 if v > 127 else 0)
+        hole = imaging.fill_enclosed(imaging.mask_from_image(job.images["mask"], src.size))
         box = imaging.mask_box(hole, margin=1.0, min_side=512)
         if box is None:
             raise ValueError("The mask is empty: paint over the object to erase first")

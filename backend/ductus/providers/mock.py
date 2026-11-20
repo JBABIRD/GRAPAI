@@ -293,7 +293,7 @@ class MockErase(Provider):
 
     def run(self, job: JobInput) -> list[Output]:
         src = imaging.flatten(job.images["image"])
-        hole = imaging.mask_from_image(job.images["mask"], src.size).point(lambda v: 255 if v > 127 else 0)
+        hole = imaging.fill_enclosed(imaging.mask_from_image(job.images["mask"], src.size))
         if not hole.getbbox():
             raise ValueError("The mask is empty: paint over the object to erase first")
         hole = hole.filter(ImageFilter.MaxFilter(7))

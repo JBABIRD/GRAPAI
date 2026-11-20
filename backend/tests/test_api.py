@@ -117,3 +117,15 @@ def test_outpaint_grows_canvas(client, sketch):
     assert job["status"] == "done", job
     a = job["outputs"][0]["asset"]
     assert (a["width"], a["height"]) == (sketch.width + 192, sketch.height + 32)
+
+
+def test_outline_mask_selects_inside():
+    from PIL import ImageDraw
+    from ductus.providers import imaging
+    ring = Image.new("L", (200, 200), 0)
+    ImageDraw.Draw(ring).ellipse((40, 40, 160, 160), outline=255, width=6)
+    filled = imaging.fill_enclosed(ring)
+    assert filled.getpixel((100, 100)) == 255 and filled.getpixel((5, 5)) == 0
+    open_stroke = Image.new("L", (200, 200), 0)
+    ImageDraw.Draw(open_stroke).line((20, 100, 180, 100), fill=255, width=6)
+    assert imaging.fill_enclosed(open_stroke).getpixel((100, 60)) == 0
