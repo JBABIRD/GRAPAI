@@ -19,10 +19,10 @@ import re
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import httpx
-from PIL import Image
+from PIL import Image, ImageFilter, ImageOps
 
 from ..config import settings
 from ..workflows import ASPECTS
@@ -179,9 +179,9 @@ class ComfyProvider(Provider):
     def values(self, job: JobInput) -> dict[str, Any]:  # pragma: no cover - per workflow
         raise NotImplementedError
 
-    def run_images(self, job: JobInput, count_key: str = "count") -> list[Output]:
+    def run_images(self, job: JobInput, count_key: str = "count", prepared: Callable[[], dict] | None = None) -> list[Output]:
         template = self.prepare(job)
-        base_values = self.values(job)
+        base_values = prepared() if prepared else self.values(job)
         count, seed = int(job.params.get(count_key, 1) or 1), job.seed()
         outs: list[Output] = []
         for i in range(count):
@@ -208,7 +208,11 @@ def _upload_inputs(client: ComfyClient, job: JobInput, names: list[str]) -> dict
 
 def _megapixel_size(job: JobInput, megapixels: float = 1.0, multiple: int = 16) -> dict[str, int]:
     """Output size for graphs that need one (FLUX.2): the input's aspect at ~1 MP."""
-    w, h = job.images["image"].size
+    return _size_for(job.images["image"].size, megapixels, multiple)
+
+
+def _size_for(size: tuple[int, int], megapixels: float = 1.0, multiple: int = 16) -> dict[str, int]:
+    w, h = size
     k = (megapixels * 1024 * 1024 / max(1, w * h)) ** 0.5
     return {"width": max(multiple, round(w * k / multiple) * multiple),
             "height": max(multiple, round(h * k / multiple) * multiple)}
@@ -295,3 +299,59 @@ class ComfyAnimate(ComfyProvider):
         if not outs:
             raise ComfyError("ComfyUI returned no video")
         return outs
+
+
+class ComfyErase(ComfyEdit):
+    """Erase: crop around the mask, blur the object away, let the edit model rebuild the background,
+    then blend the crop back so nothing outside the (slightly grown) mask changes."""
+
+    workflow, template_base, model = "erase", "edit", "Qwen-Image-Edit-2511"
+
+    def run(self, job: JobInput) -> list[Output]:
+        src = imaging.flatten(job.images["image"])
+        hole = imaging.mask_from_image(job.images["mask"], src.size)
+        box = imaging.mask_box(hole)
+        if box is None:
+            raise ValueError("The mask is empty: paint over the object to erase first")
+        grow = max(5, (max(box[2] - box[0], box[3] - box[1]) // 60) | 1)
+        hole = hole.point(lambda v: 255 if v > 127 else 0).filter(ImageFilter.MaxFilter(min(grow, 31)))
+        crop, crop_hole = src.crop(box), hole.crop(box)
+        prefilled = imaging.fill_holes(crop, crop_hole)
+
+        def prepared() -> dict[str, Any]:
+            name = self.client.upload_image(prefilled, "image")
+            return {"prompt": prompts.erase_prompt(job.params), "negative": " ", "image": name,
+                    "ref1": None, "ref2": None, **_size_for(crop.size)}
+
+        outs = self.run_images(job, prepared=prepared)
+        soft = imaging.feather(crop_hole.filter(ImageFilter.MaxFilter(min(grow, 31))), 4)
+        for o in outs:
+            patch = Image.composite(o.image.convert("RGB").resize(crop.size, Image.LANCZOS), crop, soft)
+            full = src.copy()
+            full.paste(patch, box[:2])
+            o.image = full
+        return outs
+
+
+class ComfyOutpaint(ComfyEdit):
+    """Outpaint: put the image on the bigger canvas with a soft colour fill, let the edit model paint the
+    new area at ~1 MP, then put the original pixels back at full resolution."""
+
+    workflow, template_base, model = "outpaint", "edit", "Qwen-Image-Edit-2511"
+
+    def run(self, job: JobInput) -> list[Output]:
+        src = imaging.flatten(job.images["image"])
+        pads = imaging.outpaint_pads(job.params, src.size)
+        canvas, hole = imaging.extend_canvas(src, *pads)
+
+        def prepared() -> dict[str, Any]:
+            name = self.client.upload_image(canvas, "image")
+            return {"prompt": prompts.outpaint_prompt(job.params), "negative": " ", "image": name,
+                    "ref1": None, "ref2": None, **_size_for(canvas.size)}
+
+        outs = self.run_images(job, prepared=prepared)
+        keep = imaging.feather(ImageOps.invert(hole).filter(ImageFilter.MinFilter(9)), 4)
+        for o in outs:
+            o.image = Image.composite(canvas, o.image.convert("RGB").resize(canvas.size, Image.LANCZOS), keep)
+        return outs
+

@@ -1,19 +1,41 @@
 import { Handle, NodeResizer, NodeToolbar, Position, type NodeProps } from "@xyflow/react";
-import { memo } from "react";
+import { memo, useRef, useState } from "react";
 import { download } from "../../api";
 import type { ImageNodeT } from "../../types";
 import { useBoard } from "../BoardContext";
+import OutpaintFrame, { type Pads } from "./OutpaintFrame";
 
 function ImageNode({ id, data, selected }: NodeProps<ImageNodeT>) {
-  const { openEditor, quickAction, clearMask, compareWith } = useBoard();
+  const { openEditor, quickAction, clearMask, compareWith, eraseObject, outpaint } = useBoard();
+  const [extend, setExtend] = useState<Pads | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const startExtend = () => {
+    const side = Math.round(data.width * 0.25 / 8) * 8;
+    setExtend({ left: side, top: 0, right: side, bottom: 0 });
+  };
   return (
     <div className={`item image-item${data.sketch ? " is-sketch" : ""}`} onDoubleClick={() => openEditor(id)}>
       <NodeResizer isVisible={selected} keepAspectRatio minWidth={80} minHeight={50} color="var(--accent)" />
       <Handle type="target" position={Position.Left} id="in" className="handle-in" isConnectable={false} />
-      <img src={data.url} alt={data.title ?? "image"} draggable={false} />
+      <img ref={imgRef} src={data.url} alt={data.title ?? "image"} draggable={false} />
       {data.maskUrl && <img className="mask-overlay" src={data.maskUrl} alt="" draggable={false} />}
       {data.caption && <div className="caption" title={data.caption}>{data.caption}</div>}
       <Handle type="source" position={Position.Right} id="out" className="handle-out" title="Drag to a tool input" />
+      {extend && (
+        <OutpaintFrame
+          imgW={data.width}
+          imgH={data.height}
+          shownW={imgRef.current?.offsetWidth || data.width}
+          pads={extend}
+          onChange={setExtend}
+          onCancel={() => setExtend(null)}
+          onGenerate={() => {
+            outpaint(id, extend);
+            setExtend(null);
+          }}
+        />
+      )}
+      {!extend && (
       <NodeToolbar position={Position.Top} className="node-toolbar">
         <button onClick={() => openEditor(id)} title="Draw, paint or mask (double-click)">
           Draw
@@ -28,6 +50,12 @@ function ImageNode({ id, data, selected }: NodeProps<ImageNodeT>) {
           Compare
         </button>
         <span className="sep" />
+        <button onClick={() => eraseObject(id)} title="Remove what you mask and fill in the background">
+          Erase
+        </button>
+        <button onClick={startExtend} title="Outpaint: drag a frame around the image to extend it">
+          Extend
+        </button>
         <button onClick={() => quickAction(id, "remove_bg")}>Cut out</button>
         <button onClick={() => quickAction(id, "upscale")}>Upscale</button>
         {data.maskAssetId && <button onClick={() => clearMask(id)}>Clear mask</button>}
@@ -35,6 +63,7 @@ function ImageNode({ id, data, selected }: NodeProps<ImageNodeT>) {
           ↓
         </button>
       </NodeToolbar>
+      )}
     </div>
   );
 }

@@ -53,11 +53,14 @@ type Props = {
   onSaveState: (s: "saved" | "saving" | "error") => void;
 };
 
-type EditorTarget = { nodeId: string | null; url: string | null; maskUrl: string | null; width: number; height: number; at?: { x: number; y: number } };
+type EditorTarget = { nodeId: string | null; url: string | null; maskUrl: string | null; width: number; height: number; at?: { x: number; y: number }; then?: "erase" };
 
 const IMAGE_INPUT_NODES = new Set(["image"]);
 
 // Compare is a board tool, not an AI workflow; it shares the picker's list format.
+/** Tools whose text field is optional: run straight away from the image toolbar. */
+const AUTO_RUN = new Set(["erase"]);
+
 const COMPARE_ENTRY = {
   id: "compare",
   name: "Compare",
@@ -262,6 +265,10 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
         if (e.targetHandle === "image" && d.maskAssetId && wf.inputs.some((i) => i.name === "mask")) inputs.mask = d.maskAssetId;
       }
       const missing = wf.inputs.filter((i) => i.kind === "image" && i.required && !inputs[i.name]);
+      if (wf.inputs.some((i) => i.kind === "mask" && i.required) && inputs.image && !inputs.mask) {
+        updateNodeData(toolId, { status: "error", error: "Paint a mask over the object first: Draw, then Mask (M)" });
+        return;
+      }
       if (missing.length) {
         updateNodeData(toolId, { status: "error", error: `Connect an image to ${missing.map((m) => m.label).join(", ")}` });
         return;
@@ -291,11 +298,12 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
   }, []);
 
   const addTool = useCallback(
-    (workflow: string, pos: { x: number; y: number }, sources: string[] = [], exact = false) => {
+    (workflow: string, pos: { x: number; y: number }, sources: string[] = [], exact = false, overrides: Record<string, unknown> = {}) => {
       const wf = workflows.get(workflow);
       if (!wf) return null;
       const params: Record<string, unknown> = {};
       wf.params.forEach((p) => (params[p.name] = p.default));
+      Object.assign(params, overrides);
       const tool: ToolNodeT = {
         id: uid("tool"),
         type: "tool",
@@ -329,7 +337,7 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
       const size = nodeSize(node);
       const toolId = addTool(workflow, { x: node.position.x + size.w + 90, y: node.position.y }, [nodeId, ...selected]);
       const wf = workflows.get(workflow);
-      if (toolId && wf && wf.params.every((p) => p.kind !== "text")) {
+      if (toolId && wf && (AUTO_RUN.has(workflow) || wf.params.every((p) => p.kind !== "text"))) {
         window.setTimeout(() => runTool(toolId), 80);
       }
     },
@@ -375,6 +383,28 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
     [addCompare],
   );
 
+  /** Erase what is masked; with no mask yet, open the editor on the mask brush first. */
+  const eraseObject = useCallback(
+    (nodeId: string) => {
+      const n = nodesRef.current.find((x) => x.id === nodeId) as ImageNodeT | undefined;
+      if (!n || n.type !== "image") return;
+      if (n.data.maskAssetId) quickAction(nodeId, "erase");
+      else setEditor({ nodeId, url: n.data.url, maskUrl: null, width: n.data.width, height: n.data.height, then: "erase" });
+    },
+    [quickAction],
+  );
+
+  const outpaint = useCallback(
+    (nodeId: string, pads: { left: number; top: number; right: number; bottom: number }) => {
+      const node = nodesRef.current.find((n) => n.id === nodeId);
+      if (!node) return;
+      const size = nodeSize(node);
+      const toolId = addTool("outpaint", { x: node.position.x + size.w + 90, y: node.position.y }, [nodeId], false, pads);
+      if (toolId) window.setTimeout(() => runTool(toolId), 80);
+    },
+    [addTool, runTool],
+  );
+
   const deleteNode = useCallback((nodeId: string) => rf.deleteElements({ nodes: [{ id: nodeId }] }), [rf]);
 
   const openEditor = useCallback((nodeId: string) => {
@@ -402,6 +432,11 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
           mask === undefined ? {} : { maskAssetId: mask ? mask.id : null, maskUrl: mask ? mask.url : null };
         if (target.nodeId) {
           updateNodeData(target.nodeId, { assetId: asset.id, url: asset.url, width: asset.width, height: asset.height, ...maskPatch });
+          if (target.then === "erase") {
+            const nodeId = target.nodeId;
+            if (mask) window.setTimeout(() => quickAction(nodeId, "erase"), 120);
+            else flash("Nothing to erase: paint a mask over the object");
+          }
         } else {
           const node = imageNode(asset, target.at ?? centre(), { sketch: true, title: "Sketch", ...maskPatch });
           setNodes((ns) => [...ns.map((n) => ({ ...n, selected: false })), { ...node, selected: true }]);
@@ -410,7 +445,7 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
         flash(`Could not save: ${(e as Error).message}`);
       }
     },
-    [centre, editor, flash, setNodes, updateNodeData],
+    [centre, editor, flash, quickAction, setNodes, updateNodeData],
   );
 
   const saveVideoFrame = useCallback(
@@ -456,11 +491,13 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
       openEditor,
       quickAction,
       compareWith,
+      eraseObject,
+      outpaint,
       saveVideoFrame,
       clearMask,
       deleteNode,
     }),
-    [catalogue, workflows, runTool, updateNodeData, openEditor, quickAction, compareWith, saveVideoFrame, clearMask, deleteNode],
+    [catalogue, workflows, runTool, updateNodeData, openEditor, quickAction, compareWith, eraseObject, outpaint, saveVideoFrame, clearMask, deleteNode],
   );
 
   // ---------- connections ----------
@@ -723,6 +760,7 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
         <ImageEditor
           src={editor.url}
           maskSrc={editor.maskUrl}
+          maskHint={editor.then === "erase" ? "Paint over what should disappear, then Save: it is erased and filled with background." : undefined}
           width={editor.width}
           height={editor.height}
           onCancel={() => setEditor(null)}

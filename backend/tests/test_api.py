@@ -88,3 +88,32 @@ def test_boards_roundtrip(client):
     assert got["nodes"][0]["id"] == "n1"
     assert client.get("/api/boards").json()[0]["items"] == 1
     assert client.get("/api/boards/..%2Fetc").status_code in (400, 404)
+
+
+def test_erase_fills_only_the_mask(client, sketch):
+    aid = upload(client, sketch)
+    mask = Image.new("RGBA", sketch.size, (0, 0, 0, 0))
+    mask.paste((255, 0, 0, 255), (100, 100, 200, 200))
+    mid = upload(client, mask)
+    r = client.post("/api/jobs", json={"workflow": "erase", "inputs": {"image": aid, "mask": mid}, "params": {}})
+    job = wait(client, r.json()["id"])
+    assert job["status"] == "done", job
+    img = Image.open(io.BytesIO(client.get(job["outputs"][0]["asset"]["url"]).content)).convert("RGB")
+    assert img.size == sketch.size
+    assert img.getpixel((5, 5)) == sketch.convert("RGB").getpixel((5, 5))
+
+
+def test_erase_needs_a_mask(client, sketch):
+    aid = upload(client, sketch)
+    r = client.post("/api/jobs", json={"workflow": "erase", "inputs": {"image": aid}, "params": {}})
+    assert r.status_code in (400, 422)
+
+
+def test_outpaint_grows_canvas(client, sketch):
+    aid = upload(client, sketch)
+    r = client.post("/api/jobs", json={"workflow": "outpaint", "inputs": {"image": aid},
+                                       "params": {"left": 64, "top": 0, "right": 128, "bottom": 32}})
+    job = wait(client, r.json()["id"])
+    assert job["status"] == "done", job
+    a = job["outputs"][0]["asset"]
+    assert (a["width"], a["height"]) == (sketch.width + 192, sketch.height + 32)

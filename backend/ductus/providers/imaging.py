@@ -123,3 +123,94 @@ def pad_to_aspect(image: Image.Image, aspect: float) -> Image.Image:
     canvas = Image.new("RGB", (nw, nh), fill)
     canvas.paste(image.convert("RGB"), ((nw - w) // 2, (nh - h) // 2))
     return canvas
+
+
+def _box_blur(arr: np.ndarray, r: int) -> np.ndarray:
+    """Mean filter of radius r over the first two axes (edges clamped), via cumulative sums."""
+    if r < 1:
+        return arr
+    out = arr
+    for axis in (0, 1):
+        n = out.shape[axis]
+        pad = [(0, 0)] * out.ndim
+        pad[axis] = (r + 1, r)
+        c = np.cumsum(np.pad(out, pad, mode="edge"), axis=axis, dtype=np.float64)
+        hi = np.take(c, np.arange(2 * r + 1, 2 * r + 1 + n), axis=axis)
+        lo = np.take(c, np.arange(0, n), axis=axis)
+        out = ((hi - lo) / (2 * r + 1)).astype(np.float32)
+    return out
+
+
+def fill_holes(image: Image.Image, hole: Image.Image) -> Image.Image:
+    """Fill the white area of `hole` from its surroundings, coarse to fine.
+
+    Not a generative fill: it gives the AI model (or the preview mode) a soft,
+    colour-matched starting point instead of the object or a blank border.
+    """
+    hole = hole.convert("L").resize(image.size)
+    if max(image.size) > 512:
+        # Work on a small copy (it is a soft fill anyway), then keep full-res pixels outside the hole.
+        k = 512 / max(image.size)
+        small = (max(1, round(image.width * k)), max(1, round(image.height * k)))
+        rough = fill_holes(image.resize(small, Image.BILINEAR), hole.resize(small, Image.BILINEAR))
+        return Image.composite(rough.resize(image.size, Image.BICUBIC), image.convert("RGB"), hole.point(lambda v: 255 if v >= 128 else 0))
+    rgb = np.asarray(image.convert("RGB"), dtype=np.float32)
+    known = (np.asarray(hole, dtype=np.float32) < 128).astype(np.float32)
+    if known.min() == 1.0:
+        return image.convert("RGB")
+    if known.max() == 0.0:
+        return Image.new("RGB", image.size, (128, 128, 128))
+    out = rgb.copy()
+    r = max(image.size) // 4
+    while r >= 1:
+        k = known[..., None]
+        num = _box_blur(_box_blur(rgb * k, r), r)
+        den = _box_blur(_box_blur(known, r), r)[..., None]
+        est = num / np.maximum(den, 1e-6)
+        # Finer levels take over where they have enough known pixels, blended so no bands show.
+        alpha = np.clip(den * 3, 0, 1) * (1 - k) if r < max(image.size) // 4 else (den > 1e-6) * (1 - k)
+        out = alpha * est + (1 - alpha) * out
+        r //= 2
+    return to_pil(out)
+
+
+def extend_canvas(image: Image.Image, left: int, top: int, right: int, bottom: int) -> tuple[Image.Image, Image.Image]:
+    """Place the image on a larger canvas; returns (prefilled canvas, mask of the new area)."""
+    src = flatten(image)
+    w, h = src.size
+    size = (w + left + right, h + top + bottom)
+    canvas = Image.new("RGB", size)
+    canvas.paste(src, (left, top))
+    hole = Image.new("L", size, 255)
+    hole.paste(0, (left, top, left + w, top + h))
+    return fill_holes(canvas, hole), hole
+
+
+def mask_box(mask: Image.Image, margin: float = 0.6, min_side: int = 384) -> tuple[int, int, int, int] | None:
+    """Box around the painted area, grown by `margin` of its size so the model sees context."""
+    bbox = mask.point(lambda v: 255 if v > 127 else 0).getbbox()
+    if not bbox:
+        return None
+    x0, y0, x1, y1 = bbox
+    w, h = mask.size
+    bw, bh = x1 - x0, y1 - y0
+    gw = max(bw * (1 + 2 * margin), min(min_side, w))
+    gh = max(bh * (1 + 2 * margin), min(min_side, h))
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    nx0 = int(max(0, min(cx - gw / 2, w - gw)))
+    ny0 = int(max(0, min(cy - gh / 2, h - gh)))
+    return nx0, ny0, int(min(w, nx0 + gw)), int(min(h, ny0 + gh))
+
+
+def outpaint_pads(params: dict, size: tuple[int, int], max_side: int = 4096) -> tuple[int, int, int, int]:
+    """Left/top/right/bottom padding in source pixels, clamped so the canvas stays <= max_side."""
+    w, h = size
+    pads = [max(0, int(float(params.get(k, 0) or 0))) for k in ("left", "top", "right", "bottom")]
+    if not any(pads):
+        raise ValueError("Drag the frame outside the image to choose where to extend it")
+    for a, b, side in ((0, 2, w), (1, 3, h)):
+        extra = pads[a] + pads[b]
+        if side + extra > max_side:
+            k = (max_side - side) / extra
+            pads[a], pads[b] = int(pads[a] * k), int(pads[b] * k)
+    return tuple(pads)  # type: ignore[return-value]

@@ -23,6 +23,8 @@ export const WORKFLOW_ICONS: Record<string, string> = {
   new_view: "⟲",
   animate: "▶",
   remove_bg: "◌",
+  erase: "⌫",
+  outpaint: "⤢",
   upscale: "⤢",
   compare: "◧",
 };

@@ -224,3 +224,27 @@ input[type="range"] { padding: 0; accent-color: var(--accent); background: trans
 .compare-handle::after { position: absolute; left: -46px; top: -4px; font-size: 10px; color: var(--muted); pointer-events: none; }
 .compare-handle.before::after { content: "Before"; }
 .compare-handle.after::after { content: "After"; left: -38px; }
+
+/* Outpaint frame */
+.outpaint-frame { position: absolute; z-index: 5; border: 2px dashed var(--accent); border-radius: 4px;
+  background: repeating-linear-gradient(45deg, #ff8a3d14 0 10px, #ff8a3d06 10px 20px); cursor: default; }
+.outpaint-image { position: absolute; outline: 1px solid #fff6; pointer-events: none; }
+.outpaint-handle { position: absolute; width: 14px; height: 14px; background: #fff; border: 2px solid var(--accent); border-radius: 3px; }
+.outpaint-handle.h-nw { left: 0; top: 0; cursor: nwse-resize; }
+.outpaint-handle.h-n { left: 50%; top: 0; cursor: ns-resize; }
+.outpaint-handle.h-ne { left: 100%; top: 0; cursor: nesw-resize; }
+.outpaint-handle.h-e { left: 100%; top: 50%; cursor: ew-resize; }
+.outpaint-handle.h-se { left: 100%; top: 100%; cursor: nwse-resize; }
+.outpaint-handle.h-s { left: 50%; top: 100%; cursor: ns-resize; }
+.outpaint-handle.h-sw { left: 0; top: 100%; cursor: nesw-resize; }
+.outpaint-handle.h-w { left: 0; top: 50%; cursor: ew-resize; }
+.outpaint-size { position: absolute; left: 6px; top: 6px; transform-origin: top left; font-size: 11px; padding: 2px 8px;
+  border-radius: 99px; background: #000b; color: #fff; pointer-events: none; white-space: nowrap; }
+.outpaint-bar { position: absolute; left: 50%; top: 100%; margin-top: 10px; transform-origin: top center; translate: -50% 0;
+  display: flex; gap: 3px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 9px;
+  padding: 4px; box-shadow: 0 8px 24px #0008; white-space: nowrap; }
+.outpaint-bar button { border: 0; background: transparent; padding: 4px 8px; }
+.outpaint-bar button:hover { background: var(--panel-2); }
+.outpaint-bar button.on { background: var(--panel-2); color: var(--accent); }
+.outpaint-bar button.primary { background: var(--accent); color: #111; font-weight: 600; }
+.outpaint-bar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 3px; }

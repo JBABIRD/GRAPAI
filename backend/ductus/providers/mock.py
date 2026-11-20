@@ -284,3 +284,28 @@ class LanczosUpscale(Provider):
         scale = int(job.params.get("scale", 2))
         big = src.resize((src.width * scale, src.height * scale), Image.LANCZOS)
         return [Output(image=big.filter(ImageFilter.UnsharpMask(radius=2, percent=60, threshold=2)))]
+
+
+class MockErase(Provider):
+    """Preview stand-in: the soft colour fill alone, no AI."""
+
+    workflow, backend, model = "erase", "mock", "procedural"
+
+    def run(self, job: JobInput) -> list[Output]:
+        src = imaging.flatten(job.images["image"])
+        hole = imaging.mask_from_image(job.images["mask"], src.size).point(lambda v: 255 if v > 127 else 0)
+        if not hole.getbbox():
+            raise ValueError("The mask is empty: paint over the object to erase first")
+        hole = hole.filter(ImageFilter.MaxFilter(7))
+        filled = imaging.fill_holes(src, hole)
+        out = Image.composite(filled, src, imaging.feather(hole, 3))
+        return [Output(image=out, meta={"seed": job.seed()})]
+
+
+class MockOutpaint(Provider):
+    workflow, backend, model = "outpaint", "mock", "procedural"
+
+    def run(self, job: JobInput) -> list[Output]:
+        src = imaging.flatten(job.images["image"])
+        canvas, _ = imaging.extend_canvas(src, *imaging.outpaint_pads(job.params, src.size))
+        return [Output(image=canvas, meta={"seed": job.seed()})]

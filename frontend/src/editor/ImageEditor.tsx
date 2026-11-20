@@ -10,6 +10,8 @@ export type EditorResult = {
 type Props = {
   src: string | null;
   maskSrc: string | null;
+  /** Open on the mask brush with this hint (e.g. for Erase). */
+  maskHint?: string;
   width: number;
   height: number;
   onCancel: () => void;
@@ -49,7 +51,7 @@ function makeLayer(name: string, w: number, h: number): Layer {
   return { id: `L${++layerSeq}`, name, canvas: makeCanvas(w, h), visible: true, opacity: 1, blend: "normal" };
 }
 
-export default function ImageEditor({ src, maskSrc, width, height, onCancel, onSave }: Props) {
+export default function ImageEditor({ src, maskSrc, maskHint, width, height, onCancel, onSave }: Props) {
   const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
   const W = Math.round(width * scale);
   const H = Math.round(height * scale);
@@ -103,7 +105,7 @@ export default function ImageEditor({ src, maskSrc, width, height, onCancel, onS
       setLayers([base, ink]);
       setActive(ink.id);
       setReady(true);
-      if (src && maskSrc) setTool("mask");
+      if (src && (maskSrc || maskHint)) setTool("mask");
     })();
     return () => {
       cancelled = true;
@@ -370,7 +372,7 @@ export default function ImageEditor({ src, maskSrc, width, height, onCancel, onS
               <input type="checkbox" checked={showMask} onChange={(e) => setShowMask(e.target.checked)} /> Show mask
             </label>
             <button onClick={clearMask}>Clear mask</button>
-            <span className="hint">The mask limits Edit to the painted area.</span>
+            <span className="hint">{maskHint ?? "The mask limits Edit to the painted area."}</span>
           </div>
         )}
         <div className="spacer" />

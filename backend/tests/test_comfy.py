@@ -151,3 +151,54 @@ def test_animate_pads_square_frames_instead_of_cropping(monkeypatch):
     img = uploaded["image"]
     assert abs(img.width / img.height - v["width"] / v["height"]) < 0.01
     assert img.height == 1024  # nothing cropped, sides padded
+
+
+class _BlueServer:
+    def __init__(self):
+        self.uploads = {}
+        self.graph = None
+
+    def upload_image(self, image, hint):
+        self.uploads[hint] = image
+        return f"{hint}.png"
+
+    def run(self, graph, progress=None):
+        self.graph = graph
+        return [{"filename": "out.png", "subfolder": "", "type": "output"}]
+
+    def fetch(self, f):
+        import io
+        buf = io.BytesIO()
+        Image.new("RGB", (256, 256), "blue").save(buf, format="PNG")
+        return buf.getvalue()
+
+
+def test_erase_crops_around_mask_and_keeps_the_rest():
+    srv = _BlueServer()
+    p = comfy.ComfyErase()
+    p.client = srv
+    src = Image.new("RGB", (1600, 1200), "white")
+    mask = Image.new("L", src.size, 0)
+    mask.paste(255, (700, 500, 800, 600))
+    outs = p.run(JobInput(images={"image": src, "mask": mask}, params={"mode": "fast", "count": 1, "seed": 1}))
+    sent = srv.uploads["image"]
+    assert sent.size[0] < src.size[0] and sent.size[1] < src.size[1]  # only the area around the mask
+    assert "Remove the object" in srv.graph["20"]["inputs"]["prompt"]
+    out = outs[0].image
+    assert out.size == src.size
+    assert out.getpixel((750, 550))[2] > 200 and out.getpixel((750, 550))[0] < 60  # filled by the model
+    assert out.getpixel((10, 10)) == (255, 255, 255)  # far away: untouched
+
+
+def test_outpaint_keeps_original_and_fills_new_area():
+    srv = _BlueServer()
+    p = comfy.ComfyOutpaint()
+    p.client = srv
+    src = Image.new("RGB", (800, 600), "white")
+    outs = p.run(JobInput(images={"image": src},
+                          params={"mode": "fast", "count": 1, "seed": 1, "left": 200, "right": 0, "top": 0, "bottom": 100}))
+    out = outs[0].image
+    assert out.size == (1000, 700)
+    assert srv.uploads["image"].size == (1000, 700)
+    assert out.getpixel((20, 300))[2] > 200          # new area from the model
+    assert out.getpixel((600, 300)) == (255, 255, 255)  # original pixels back
