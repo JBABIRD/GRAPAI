@@ -5,7 +5,7 @@ import type { ImageNodeT } from "../../types";
 import { useBoard } from "../BoardContext";
 
 function ImageNode({ id, data, selected }: NodeProps<ImageNodeT>) {
-  const { openEditor, quickAction, clearMask } = useBoard();
+  const { openEditor, quickAction, clearMask, compareWith } = useBoard();
   return (
     <div className={`item image-item${data.sketch ? " is-sketch" : ""}`} onDoubleClick={() => openEditor(id)}>
       <NodeResizer isVisible={selected} keepAspectRatio minWidth={80} minHeight={50} color="var(--accent)" />
@@ -24,6 +24,9 @@ function ImageNode({ id, data, selected }: NodeProps<ImageNodeT>) {
         </button>
         <button onClick={() => quickAction(id, "new_view")}>New view</button>
         <button onClick={() => quickAction(id, "animate")}>Animate</button>
+        <button onClick={() => compareWith(id)} title="Before/after slider against the image this came from">
+          Compare
+        </button>
         <span className="sep" />
         <button onClick={() => quickAction(id, "remove_bg")}>Cut out</button>
         <button onClick={() => quickAction(id, "upscale")}>Upscale</button>

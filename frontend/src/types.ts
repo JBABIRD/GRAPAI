@@ -67,7 +67,9 @@ export type VideoNodeT = Node<VideoData, "video">;
 export type NoteNodeT = Node<NoteData, "note">;
 export type SectionNodeT = Node<SectionData, "section">;
 export type ToolNodeT = Node<ToolData, "tool">;
-export type BoardNode = ImageNodeT | VideoNodeT | NoteNodeT | SectionNodeT | ToolNodeT;
+export type CompareData = { split: number };
+export type CompareNodeT = Node<CompareData, "compare">;
+export type BoardNode = ImageNodeT | VideoNodeT | NoteNodeT | SectionNodeT | ToolNodeT | CompareNodeT;
 
 export type BoardDoc = {
   id: string;

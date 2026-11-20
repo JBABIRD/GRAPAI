@@ -24,6 +24,7 @@ export const WORKFLOW_ICONS: Record<string, string> = {
   animate: "▶",
   remove_bg: "◌",
   upscale: "⤢",
+  compare: "◧",
 };
 
 export function inside(inner: BoardNode, outer: BoardNode): boolean {

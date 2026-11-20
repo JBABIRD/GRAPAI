@@ -10,9 +10,10 @@ type Props = {
   onSection: () => void;
   onTool: (workflow: string) => void;
   onFit: () => void;
+  onCompare: () => void;
 };
 
-export default function Toolbar({ workflows, onSketch, onUpload, onNote, onSection, onTool, onFit }: Props) {
+export default function Toolbar({ workflows, onSketch, onUpload, onNote, onSection, onTool, onFit, onCompare }: Props) {
   const [open, setOpen] = useState(false);
   return (
     <div className="side-toolbar">
@@ -50,6 +51,10 @@ export default function Toolbar({ workflows, onSketch, onUpload, onNote, onSecti
           </div>
         )}
       </div>
+      <button onClick={onCompare} title="Before/after compare: select one result, or two images (left = before)">
+        <span>◧</span>
+        <small>Compare</small>
+      </button>
       <button onClick={onNote} title="Sticky note (N)">
         <span>▤</span>
         <small>Note</small>

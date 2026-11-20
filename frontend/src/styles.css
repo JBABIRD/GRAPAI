@@ -205,3 +205,22 @@ input[type="range"] { padding: 0; accent-color: var(--accent); background: trans
 .tool-picker b { display: block; font-weight: 600; }
 .tool-picker em { display: block; font-style: normal; color: var(--muted); font-size: 11.5px; line-height: 1.3; }
 .tool-picker .none { color: var(--muted); margin: 6px 8px; }
+
+/* compare node */
+.compare-item { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px #0008; display: flex; flex-direction: column; overflow: visible; }
+.compare-head { display: flex; align-items: center; justify-content: space-between; padding: 5px 6px 5px 12px; font-weight: 650; font-size: 13px; }
+.compare-head .close { border: 0; background: transparent; color: var(--muted); font-size: 15px; }
+.compare-area { position: relative; flex: 1; min-height: 0; border-radius: 0 0 10px 10px; overflow: hidden; background: #0d0e10; cursor: ew-resize; user-select: none; touch-action: none; }
+.compare-area img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.compare-divider { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 6px #000a; pointer-events: none; }
+.compare-knob { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 30px; height: 30px; border-radius: 50%; background: #fff; color: #111; display: grid; place-items: center; font-size: 15px; box-shadow: 0 2px 8px #0008; }
+.compare-label { position: absolute; top: 8px; font-size: 11px; padding: 2px 7px; border-radius: 99px; background: #000a; color: #fff; pointer-events: none; }
+.compare-label.left { left: 8px; }
+.compare-label.right { right: 8px; }
+.compare-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); text-align: center; padding: 12px; }
+.compare-handle.before { top: 38% !important; }
+.compare-handle.after { top: 62% !important; }
+.compare-handle { left: -7px !important; }
+.compare-handle::after { position: absolute; left: -46px; top: -4px; font-size: 10px; color: var(--muted); pointer-events: none; }
+.compare-handle.before::after { content: "Before"; }
+.compare-handle.after::after { content: "After"; left: -38px; }

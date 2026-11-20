@@ -22,6 +22,7 @@ import { api, canvasToBlob } from "../api";
 import ImageEditor, { type EditorResult } from "../editor/ImageEditor";
 import type {
   Asset,
+  CompareNodeT,
   BoardDoc,
   BoardNode,
   Catalogue,
@@ -34,6 +35,7 @@ import type {
   VideoNodeT,
 } from "../types";
 import { BoardContext, type BoardActions } from "./BoardContext";
+import CompareNode from "./nodes/CompareNode";
 import ImageNode from "./nodes/ImageNode";
 import NoteNode from "./nodes/NoteNode";
 import SectionNode from "./nodes/SectionNode";
@@ -43,7 +45,7 @@ import Toolbar from "./Toolbar";
 import ToolPicker from "./ToolPicker";
 import { IMAGE_W, TOOL_W, fitSize, freeSpot, inside, nodeSize, uid } from "./util";
 
-const nodeTypes: NodeTypes = { image: ImageNode, video: VideoNode, note: NoteNode, section: SectionNode, tool: ToolNode };
+const nodeTypes: NodeTypes = { image: ImageNode, video: VideoNode, note: NoteNode, section: SectionNode, tool: ToolNode, compare: CompareNode };
 
 type Props = {
   doc: BoardDoc;
@@ -54,6 +56,18 @@ type Props = {
 type EditorTarget = { nodeId: string | null; url: string | null; maskUrl: string | null; width: number; height: number; at?: { x: number; y: number } };
 
 const IMAGE_INPUT_NODES = new Set(["image"]);
+
+// Compare is a board tool, not an AI workflow; it shares the picker's list format.
+const COMPARE_ENTRY = {
+  id: "compare",
+  name: "Compare",
+  description: "Before/after slider. This image is Before; connect an After.",
+  output: "image" as const,
+  inputs: [],
+  params: [],
+  model: "",
+  license: "",
+};
 
 function prepare(nodes: BoardNode[]): BoardNode[] {
   return nodes.map((n) => (n.type === "section" ? { ...n, zIndex: -1 } : n));
@@ -322,6 +336,45 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
     [addTool, runTool, workflows],
   );
 
+  const addCompare = useCallback(
+    (pos: { x: number; y: number }, before?: string | null, after?: string | null, exact = false) => {
+      const ref = nodesRef.current.find((n) => n.id === (after ?? before)) as ImageNodeT | undefined;
+      const w = 360;
+      const h = Math.round(w * ((ref?.data.height ?? 3) / (ref?.data.width ?? 4))) + 32;
+      const node: CompareNodeT = {
+        id: uid("cmp"),
+        type: "compare",
+        position: exact ? pos : freeSpot(nodesRef.current, pos, w, h),
+        width: w,
+        height: h,
+        data: { split: 0.5 },
+      };
+      const links: Edge[] = [];
+      if (before) links.push({ id: uid("e"), source: before, sourceHandle: "out", target: node.id, targetHandle: "before" });
+      if (after) links.push({ id: uid("e"), source: after, sourceHandle: "out", target: node.id, targetHandle: "after" });
+      setNodes((ns) => [...ns.map((n) => ({ ...n, selected: false })), { ...node, selected: true }]);
+      setEdges((es) => [...es, ...links]);
+      return node.id;
+    },
+    [setEdges, setNodes],
+  );
+
+  /** Compare a result with the image that went into the block that made it. */
+  const compareWith = useCallback(
+    (nodeId: string) => {
+      const ns = nodesRef.current, es = edgesRef.current;
+      const node = ns.find((n) => n.id === nodeId);
+      if (!node) return;
+      const producer = es.find((e) => e.target === nodeId && ns.find((n) => n.id === e.source)?.type === "tool");
+      const input = producer && es.find((e) => e.target === producer.source && e.targetHandle === "image");
+      const size = nodeSize(node);
+      const pos = { x: node.position.x + size.w + 60, y: node.position.y };
+      if (input) addCompare(pos, input.source, nodeId);
+      else addCompare(pos, nodeId, null);
+    },
+    [addCompare],
+  );
+
   const deleteNode = useCallback((nodeId: string) => rf.deleteElements({ nodes: [{ id: nodeId }] }), [rf]);
 
   const openEditor = useCallback((nodeId: string) => {
@@ -402,18 +455,21 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
       updateNodeData,
       openEditor,
       quickAction,
+      compareWith,
       saveVideoFrame,
       clearMask,
       deleteNode,
     }),
-    [catalogue, workflows, runTool, updateNodeData, openEditor, quickAction, saveVideoFrame, clearMask, deleteNode],
+    [catalogue, workflows, runTool, updateNodeData, openEditor, quickAction, compareWith, saveVideoFrame, clearMask, deleteNode],
   );
 
   // ---------- connections ----------
   const isValidConnection: IsValidConnection = useCallback((c) => {
     const target = nodesRef.current.find((n) => n.id === c.target);
     const source = nodesRef.current.find((n) => n.id === c.source);
-    return target?.type === "tool" && source?.type === "image" && c.source !== c.target && !!c.targetHandle && c.targetHandle !== "out";
+    if (source?.type !== "image" || c.source === c.target || !c.targetHandle) return false;
+    if (target?.type === "compare") return c.targetHandle === "before" || c.targetHandle === "after";
+    return target?.type === "tool" && c.targetHandle !== "out";
   }, []);
 
   const onConnect: OnConnect = useCallback(
@@ -444,12 +500,16 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
     (workflow: string) => {
       if (!picker) return;
       setPicker(null);
+      if (workflow === "compare") {
+        addCompare({ x: picker.flow.x + 20, y: picker.flow.y - 40 }, picker.source, null, true);
+        return;
+      }
       // The block's first input sits about 120 px below its top edge; line it up with the drop point.
       const toolId = addTool(workflow, { x: picker.flow.x + 20, y: picker.flow.y - 120 }, [picker.source], true);
       const wf = workflows.get(workflow);
       if (toolId && wf && wf.params.every((p) => p.kind !== "text")) window.setTimeout(() => runTool(toolId), 80);
     },
-    [addTool, picker, runTool, workflows],
+    [addCompare, addTool, picker, runTool, workflows],
   );
 
   // ---------- sections carry their contents ----------
@@ -601,6 +661,19 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
             } else addTool(w, { x: c.x - TOOL_W / 2, y: c.y - 160 });
           }}
           onFit={() => rf.fitView({ padding: 0.15, duration: 300 })}
+          onCompare={() => {
+            const sel = nodesRef.current
+              .filter((n) => n.selected && n.type === "image")
+              .sort((a, b) => a.position.x - b.position.x || a.position.y - b.position.y);
+            if (sel.length === 1) compareWith(sel[0].id);
+            else if (sel.length >= 2) {
+              const right = Math.max(...sel.map((n) => n.position.x + nodeSize(n).w));
+              addCompare({ x: right + 60, y: sel[0].position.y }, sel[0].id, sel[1].id);
+            } else {
+              const c = centre();
+              addCompare({ x: c.x - 180, y: c.y - 140 });
+            }
+          }}
         />
         <input
           ref={fileInput}
@@ -636,7 +709,10 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
         {picker && (
           <ToolPicker
             at={picker.screen}
-            workflows={catalogue.workflows.filter((w) => w.inputs.some((i) => i.kind === "image" && i.required))}
+            workflows={[
+              ...catalogue.workflows.filter((w) => w.inputs.some((i) => i.kind === "image" && i.required)),
+              COMPARE_ENTRY,
+            ]}
             onPick={pickTool}
             onClose={() => setPicker(null)}
           />

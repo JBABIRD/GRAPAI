@@ -9,6 +9,7 @@ export type BoardActions = {
   updateNodeData: (id: string, patch: Record<string, unknown>) => void;
   openEditor: (nodeId: string) => void;
   quickAction: (nodeId: string, workflow: string) => void;
+  compareWith: (nodeId: string) => void;
   saveVideoFrame: (nodeId: string, time: number) => void;
   clearMask: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
