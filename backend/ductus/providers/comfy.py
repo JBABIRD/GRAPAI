@@ -350,8 +350,7 @@ class ComfyOutpaint(ComfyEdit):
                     "ref1": None, "ref2": None, **_size_for(canvas.size)}
 
         outs = self.run_images(job, prepared=prepared)
-        keep = imaging.feather(ImageOps.invert(hole).filter(ImageFilter.MinFilter(9)), 4)
         for o in outs:
-            o.image = Image.composite(canvas, o.image.convert("RGB").resize(canvas.size, Image.LANCZOS), keep)
+            o.image = imaging.blend_outpaint(canvas, o.image, hole)
         return outs
 

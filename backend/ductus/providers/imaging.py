@@ -152,7 +152,8 @@ def fill_holes(image: Image.Image, hole: Image.Image) -> Image.Image:
         # Work on a small copy (it is a soft fill anyway), then keep full-res pixels outside the hole.
         k = 512 / max(image.size)
         small = (max(1, round(image.width * k)), max(1, round(image.height * k)))
-        rough = fill_holes(image.resize(small, Image.BILINEAR), hole.resize(small, Image.BILINEAR))
+        # Any small pixel that touches the hole counts as hole, so no hole colour bleeds into the fill.
+        rough = fill_holes(image.resize(small, Image.BOX), hole.resize(small, Image.BOX).point(lambda v: 255 if v > 0 else 0))
         return Image.composite(rough.resize(image.size, Image.BICUBIC), image.convert("RGB"), hole.point(lambda v: 255 if v >= 128 else 0))
     rgb = np.asarray(image.convert("RGB"), dtype=np.float32)
     known = (np.asarray(hole, dtype=np.float32) < 128).astype(np.float32)
@@ -214,3 +215,28 @@ def outpaint_pads(params: dict, size: tuple[int, int], max_side: int = 4096) -> 
             k = (max_side - side) / extra
             pads[a], pads[b] = int(pads[a] * k), int(pads[b] * k)
     return tuple(pads)  # type: ignore[return-value]
+
+
+def blend_outpaint(canvas: Image.Image, generated: Image.Image, hole: Image.Image) -> Image.Image:
+    """Put the original back over a generated outpaint without a visible seam.
+
+    The model's new area often comes out a touch lighter or darker. Measure that tone
+    difference where the original is, extend it smoothly over the new area, correct
+    for it, then cross-fade over a band inside the original's border.
+    """
+    gen = generated.convert("RGB").resize(canvas.size, Image.LANCZOS)
+    orig = np.asarray(canvas, dtype=np.float32)
+    g = np.asarray(gen, dtype=np.float32)
+    known = np.asarray(hole, dtype=np.float32) < 128
+    side = min(canvas.size)
+    # Low-frequency tone difference, measured only on original pixels.
+    r = max(4, side // 24)
+    k = known.astype(np.float32)
+    diff = _box_blur(_box_blur((orig - g) * k[..., None], r), r) / np.maximum(_box_blur(_box_blur(k, r), r), 1e-3)[..., None]
+    diff_img = to_pil(np.clip(diff + 128, 0, 255))
+    field = np.asarray(fill_holes(diff_img, hole), dtype=np.float32) - 128
+    corrected = to_pil(g + field)
+    band = max(8, side // 40) | 1
+    keep = Image.fromarray((known * 255).astype(np.uint8)).filter(ImageFilter.MinFilter(min(band, 31)))
+    keep = feather(keep, band / 2)
+    return Image.composite(canvas, corrected, keep)
