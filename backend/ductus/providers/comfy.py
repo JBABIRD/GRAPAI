@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import httpx
+import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
 from ..config import settings
@@ -302,53 +303,56 @@ class ComfyAnimate(ComfyProvider):
 
 
 class ComfyInpaint(ComfyProvider):
-    """True inpainting: only the masked area is generated, guided by the untouched pixels around it."""
+    """True inpainting with FLUX.2 klein: only the masked area is generated, the whole image is the
+    model's reference, and unmasked pixels stay exact."""
 
     backend, template_base = "comfy", "inpaint"
-    denoise = 1.0
 
-    def inpaint(self, job: JobInput, image: Image.Image, soft: Image.Image, prompt: str) -> list[Image.Image]:
-        """Fill the white part of `soft` (0-255, feathered) in `image`; returns results at image size."""
+    def inpaint(self, job: JobInput, image: Image.Image, hole: Image.Image, prompt: str,
+                grow: int, blur: float) -> list[Image.Image]:
+        """Fill the white part of `hole` (full-res, binary) in `image`. `grow`/`blur` are in pixels at
+        the model's working size (~1 MP), so they behave the same for any input size."""
         template = self.prepare(job)
         size = _size_for(image.size, float(self.template_meta.get("megapixels", 1.0)))
         work = image.resize((size["width"], size["height"]), Image.LANCZOS)
-        work_mask = soft.resize(work.size, Image.BILINEAR).convert("RGB")
+        m = hole.resize(work.size, Image.BILINEAR).point(lambda v: 255 if v > 127 else 0)
+        if grow > 1:
+            m = m.filter(ImageFilter.MaxFilter(grow | 1))
+        soft = m.filter(ImageFilter.GaussianBlur(blur)) if blur > 0 else m
+        # LoadImageMask reads the red channel: the mask must go up as RGB, not L.
         img_name = self.client.upload_image(work, "image")
-        mask_name = self.client.upload_image(work_mask, "mask")
+        mask_name = self.client.upload_image(soft.convert("RGB"), "mask")
+        full_soft = soft.resize(image.size, Image.BILINEAR)
         count, seed = int(job.params.get("count", 1) or 1), job.seed()
         outs: list[Image.Image] = []
         for i in range(count):
             job.progress(i / count, f"generating {i + 1}/{count}")
-            graph = fill_template(template, {"prompt": prompt, "negative": prompts.NEGATIVE, "image": img_name,
-                                             "mask": mask_name, "seed": seed + i, "denoise": self.denoise})
+            graph = fill_template(template, {"prompt": prompt, "image": img_name, "mask": mask_name,
+                                             "seed": seed + i, **size})
             for f in self.client.run(graph, lambda p, m="": job.progress((i + p) / count, m)):
                 if f["filename"].lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
                     out = Image.open(io.BytesIO(self.client.fetch(f)))
                     out.load()
                     out = out.convert("RGB").resize(image.size, Image.LANCZOS)
-                    # Only the masked area changes; the rest stays pixel-exact.
-                    outs.append(Image.composite(out, image, soft))
+                    # Only the masked area changes; the rest stays pixel-exact at full resolution.
+                    outs.append(Image.composite(out, image, full_soft))
         return outs
 
 
 class ComfyErase(ComfyInpaint):
-    """Erase: crop around the mask with plenty of context and inpaint only the (grown) mask."""
+    """Erase: the original (no prefill, or klein copies the blur) with the grown, softened mask."""
 
-    workflow, model = "erase", "Z-Image-Turbo / Qwen-Image (inpaint)"
+    workflow, model = "erase", "FLUX.2 klein 4B (inpaint)"
 
     def run(self, job: JobInput) -> list[Output]:
         src = imaging.flatten(job.images["image"])
         hole = imaging.fill_enclosed(imaging.mask_from_image(job.images["mask"], src.size))
-        box = imaging.mask_box(hole, margin=1.0, min_side=512)
+        box = imaging.mask_box(hole, margin=1.5, min_side=int(min(src.size) * 0.6))
         if box is None:
             raise ValueError("The mask is empty: paint over the object to erase first")
-        crop, crop_hole = src.crop(box), hole.crop(box)
-        grow = max(5, (min(crop.size) // 40) | 1)
-        crop_hole = crop_hole.filter(ImageFilter.MaxFilter(min(grow, 31)))  # take the object's edge and shadow too
-        soft = imaging.feather(crop_hole, grow / 2)
-        prefilled = Image.composite(imaging.fill_holes(crop, crop_hole), crop, crop_hole)
+        crop = src.crop(box)
         outs = []
-        for patch in self.inpaint(job, prefilled, soft, prompts.erase_prompt(job.params)):
+        for patch in self.inpaint(job, crop, hole.crop(box), prompts.erase_prompt(job.params), grow=15, blur=8):
             full = src.copy()
             full.paste(patch, box[:2])
             outs.append(Output(image=full, meta={"seed": job.seed()}))
@@ -356,16 +360,17 @@ class ComfyErase(ComfyInpaint):
 
 
 class ComfyOutpaint(ComfyInpaint):
-    """Outpaint: inpaint the new border on the bigger canvas, overlapping the original a little so the
-    join is generated together with its surroundings."""
+    """Outpaint: edge-extend the image onto the bigger canvas and inpaint the new area, overlapping the
+    original a little so the join is generated with its surroundings."""
 
-    workflow, model = "outpaint", "Z-Image-Turbo / Qwen-Image (inpaint)"
+    workflow, model = "outpaint", "FLUX.2 klein 4B (inpaint)"
 
     def run(self, job: JobInput) -> list[Output]:
         src = imaging.flatten(job.images["image"])
-        canvas, hole = imaging.extend_canvas(src, *imaging.outpaint_pads(job.params, src.size))
-        overlap = max(8, (min(src.size) // 32) | 1)
-        grown = hole.filter(ImageFilter.MaxFilter(min(overlap, 31)))
-        soft = imaging.feather(grown, overlap / 2)
-        outs = self.inpaint(job, canvas, soft, prompts.outpaint_prompt(job.params))
+        left, top, right, bottom = imaging.outpaint_pads(job.params, src.size)
+        arr = np.pad(np.asarray(src), ((top, bottom), (left, right), (0, 0)), mode="edge")
+        canvas = Image.fromarray(arr)
+        hole = Image.new("L", canvas.size, 255)
+        hole.paste(0, (left, top, left + src.width, top + src.height))
+        outs = self.inpaint(job, canvas, hole, prompts.outpaint_prompt(job.params), grow=2 * 24 + 1, blur=10)
         return [Output(image=o, meta={"seed": job.seed()}) for o in outs]

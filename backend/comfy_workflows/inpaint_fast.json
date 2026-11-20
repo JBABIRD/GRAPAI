@@ -1,26 +1,27 @@
 {
   "_meta": {
-    "title": "Inpaint / outpaint (Z-Image-Turbo)",
-    "model": "Z-Image-Turbo (Apache-2.0)",
+    "title": "Erase / outpaint (fast)",
+    "model": "FLUX.2 klein 4B (Apache-2.0)",
     "files": {
-      "diffusion_models": "z_image_turbo_bf16.safetensors",
+      "diffusion_models": "flux-2-klein-4b-fp8.safetensors",
       "text_encoders": "qwen_3_4b.safetensors",
-      "vae": "ae.safetensors"
+      "vae": "flux2-vae.safetensors"
     },
+    "note": "True inpainting with the image as reference: VAEEncode -> SetLatentNoiseMask, DifferentialDiffusion for a soft edge, ReferenceLatent keeps the scene consistent, ImageCompositeMasked keeps unmasked pixels exact. The mask must be an RGB PNG (LoadImageMask reads the red channel).",
+    "megapixels": 1.5,
     "placeholders": [
-      "prompt",
       "image",
       "mask",
-      "seed",
-      "denoise"
-    ],
-    "megapixels": 1.5,
-    "note": "True inpainting: the image is VAE-encoded and only the masked latent area is re-noised (SetLatentNoiseMask + DifferentialDiffusion for a soft edge), so unmasked pixels guide the fill."
+      "prompt",
+      "width",
+      "height",
+      "seed"
+    ]
   },
   "1": {
     "class_type": "UNETLoader",
     "inputs": {
-      "unet_name": "z_image_turbo_bf16.safetensors",
+      "unet_name": "flux-2-klein-4b-fp8.safetensors",
       "weight_dtype": "default"
     }
   },
@@ -28,24 +29,14 @@
     "class_type": "CLIPLoader",
     "inputs": {
       "clip_name": "qwen_3_4b.safetensors",
-      "type": "lumina2",
+      "type": "flux2",
       "device": "default"
     }
   },
   "3": {
     "class_type": "VAELoader",
     "inputs": {
-      "vae_name": "ae.safetensors"
-    }
-  },
-  "4": {
-    "class_type": "ModelSamplingAuraFlow",
-    "inputs": {
-      "model": [
-        "1",
-        0
-      ],
-      "shift": 3.0
+      "vae_name": "flux2-vae.safetensors"
     }
   },
   "5": {
@@ -58,85 +49,13 @@
       "text": "{{prompt}}"
     }
   },
-  "6": {
-    "class_type": "ConditioningZeroOut",
-    "inputs": {
-      "conditioning": [
-        "5",
-        0
-      ]
-    }
-  },
-  "8": {
-    "class_type": "KSampler",
-    "inputs": {
-      "model": [
-        "15",
-        0
-      ],
-      "seed": "{{seed}}",
-      "steps": 8,
-      "cfg": 1.0,
-      "sampler_name": "res_multistep",
-      "scheduler": "simple",
-      "positive": [
-        "5",
-        0
-      ],
-      "negative": [
-        "6",
-        0
-      ],
-      "latent_image": [
-        "14",
-        0
-      ],
-      "denoise": "{{denoise}}"
-    }
-  },
-  "9": {
-    "class_type": "VAEDecode",
-    "inputs": {
-      "samples": [
-        "8",
-        0
-      ],
-      "vae": [
-        "3",
-        0
-      ]
-    }
-  },
   "10": {
-    "class_type": "SaveImage",
-    "inputs": {
-      "images": [
-        "9",
-        0
-      ],
-      "filename_prefix": "ductus/inpaint"
-    }
-  },
-  "11": {
     "class_type": "LoadImage",
     "inputs": {
       "image": "{{image}}"
     }
   },
-  "12": {
-    "class_type": "VAEEncode",
-    "inputs": {
-      "pixels": [
-        "11",
-        0
-      ],
-      "vae": [
-        "3",
-        0
-      ]
-    }
-  },
-  "13": {
+  "11": {
     "class_type": "LoadImageMask",
     "inputs": {
       "image": "{{mask}}",
@@ -144,25 +63,152 @@
     }
   },
   "14": {
-    "class_type": "SetLatentNoiseMask",
+    "class_type": "VAEEncode",
     "inputs": {
-      "samples": [
-        "12",
+      "pixels": [
+        "10",
         0
       ],
-      "mask": [
-        "13",
+      "vae": [
+        "3",
         0
       ]
     }
   },
   "15": {
+    "class_type": "SetLatentNoiseMask",
+    "inputs": {
+      "samples": [
+        "14",
+        0
+      ],
+      "mask": [
+        "11",
+        0
+      ]
+    }
+  },
+  "16": {
     "class_type": "DifferentialDiffusion",
     "inputs": {
       "model": [
-        "4",
+        "1",
         0
       ]
+    }
+  },
+  "20": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "5",
+        0
+      ],
+      "latent": [
+        "14",
+        0
+      ]
+    }
+  },
+  "32": {
+    "class_type": "Flux2Scheduler",
+    "inputs": {
+      "steps": 6,
+      "width": "{{width}}",
+      "height": "{{height}}"
+    }
+  },
+  "33": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": "{{seed}}"
+    }
+  },
+  "34": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    }
+  },
+  "35": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "model": [
+        "16",
+        0
+      ],
+      "conditioning": [
+        "20",
+        0
+      ]
+    }
+  },
+  "36": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "33",
+        0
+      ],
+      "guider": [
+        "35",
+        0
+      ],
+      "sampler": [
+        "34",
+        0
+      ],
+      "sigmas": [
+        "32",
+        0
+      ],
+      "latent_image": [
+        "15",
+        0
+      ]
+    }
+  },
+  "37": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "36",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "39": {
+    "class_type": "ImageCompositeMasked",
+    "inputs": {
+      "destination": [
+        "10",
+        0
+      ],
+      "source": [
+        "37",
+        0
+      ],
+      "x": 0,
+      "y": 0,
+      "resize_source": false,
+      "mask": [
+        "11",
+        0
+      ]
+    }
+  },
+  "38": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "39",
+        0
+      ],
+      "filename_prefix": "ductus/inpaint"
     }
   }
 }

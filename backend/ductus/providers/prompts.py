@@ -59,16 +59,19 @@ def animate_prompt(params: dict) -> str:
 
 
 def erase_prompt(params: dict) -> str:
-    fill = str(params.get("prompt", "")).strip()
-    if fill:
-        return f"{fill}, seamlessly matching the surrounding scene, same lighting, perspective and texture, photorealistic"
-    return ("empty background only, seamless continuation of the surrounding surfaces, floor and backdrop, "
-            "same lighting, perspective and texture, nothing in this area, no objects, photorealistic")
+    """Klein follows instructions: say what to remove and, if given, what replaces it."""
+    text = str(params.get("prompt", "")).strip()
+    base = "Remove the masked object completely, including its shadow and reflection."
+    if text:
+        return f"{base} {text}. Keep everything else unchanged, same lighting and perspective."
+    return (f"{base} Fill the area with the background that continues seamlessly from its surroundings, "
+            "same surfaces, texture, lighting and perspective. Keep everything else unchanged.")
 
 
 def outpaint_prompt(params: dict) -> str:
     extra = str(params.get("prompt", "")).strip()
-    base = ("wide view of the same scene, the background, ground, sky and lighting continue naturally to the "
-            "edges of the frame, consistent perspective and reflections, sharp photographic detail, "
-            "no additional vehicles, products or people, no added text, no borders, no frames")
-    return f"{extra}, {base}" if extra else base
+    base = ("Extend the photo outward: the same scene continues naturally beyond the original edges, matching "
+            "ground, background, sky, lighting, reflections and perspective.")
+    if extra:
+        base += f" Around it: {extra}."
+    return base + " Do not add any vehicles, people, buildings, text or other new objects."

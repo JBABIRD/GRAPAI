@@ -183,8 +183,9 @@ def test_erase_crops_around_mask_and_keeps_the_rest():
     outs = p.run(JobInput(images={"image": src, "mask": mask}, params={"mode": "fast", "count": 1, "seed": 1}))
     sent = srv.uploads["image"]
     assert abs(sent.size[0] / sent.size[1] - 1.0) < 0.05  # a square crop around the mask, not the 4:3 frame
-    assert "empty background" in srv.graph["5"]["inputs"]["text"]
-    assert srv.graph["8"]["inputs"]["denoise"] == 1.0 and "mask" in srv.uploads
+    assert srv.graph["5"]["inputs"]["text"].startswith("Remove the masked object")
+    assert srv.uploads["mask"].mode == "RGB"  # LoadImageMask reads the red channel
+    assert srv.graph["32"]["inputs"]["width"] == sent.size[0]
     out = outs[0].image
     assert out.size == src.size
     assert out.getpixel((750, 550))[2] > 200 and out.getpixel((750, 550))[0] < 60  # filled by the model
