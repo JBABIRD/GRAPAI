@@ -195,3 +195,13 @@ input[type="range"] { padding: 0; accent-color: var(--accent); background: trans
   .board-name { width: 130px; }
   .provider { display: none; }
 }
+
+/* tool picker after dragging out of an image */
+.tool-picker { position: absolute; z-index: 30; width: 300px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 2px; box-shadow: 0 16px 40px #000a; }
+.tool-picker input { margin-bottom: 4px; }
+.tool-picker button { display: grid; grid-template-columns: 24px 1fr; gap: 8px; text-align: left; border: 0; background: transparent; padding: 6px 8px; }
+.tool-picker button.on { background: var(--panel-2); }
+.tool-picker .ti { color: var(--accent); font-size: 15px; align-self: center; text-align: center; }
+.tool-picker b { display: block; font-weight: 600; }
+.tool-picker em { display: block; font-style: normal; color: var(--muted); font-size: 11.5px; line-height: 1.3; }
+.tool-picker .none { color: var(--muted); margin: 6px 8px; }

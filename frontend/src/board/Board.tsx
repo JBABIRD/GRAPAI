@@ -14,6 +14,7 @@ import {
   type IsValidConnection,
   type NodeTypes,
   type OnConnect,
+  type OnConnectEnd,
   type OnNodeDrag,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -39,6 +40,7 @@ import SectionNode from "./nodes/SectionNode";
 import ToolNode from "./nodes/ToolNode";
 import VideoNode from "./nodes/VideoNode";
 import Toolbar from "./Toolbar";
+import ToolPicker from "./ToolPicker";
 import { IMAGE_W, TOOL_W, fitSize, freeSpot, inside, nodeSize, uid } from "./util";
 
 const nodeTypes: NodeTypes = { image: ImageNode, video: VideoNode, note: NoteNode, section: SectionNode, tool: ToolNode };
@@ -275,7 +277,7 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
   }, []);
 
   const addTool = useCallback(
-    (workflow: string, pos: { x: number; y: number }, sources: string[] = []) => {
+    (workflow: string, pos: { x: number; y: number }, sources: string[] = [], exact = false) => {
       const wf = workflows.get(workflow);
       if (!wf) return null;
       const params: Record<string, unknown> = {};
@@ -283,7 +285,7 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
       const tool: ToolNodeT = {
         id: uid("tool"),
         type: "tool",
-        position: freeSpot(nodesRef.current, pos, TOOL_W, 200 + wf.inputs.length * 30 + wf.params.length * 40),
+        position: exact ? pos : freeSpot(nodesRef.current, pos, TOOL_W, 200 + wf.inputs.length * 30 + wf.params.length * 40),
         width: TOOL_W,
         data: { workflow, params, status: "idle" } satisfies ToolData,
       };
@@ -422,6 +424,34 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
     [setEdges],
   );
 
+  // Dragging a connection out of an image and dropping it on empty canvas offers the tools.
+  const [picker, setPicker] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number }; source: string } | null>(null);
+  const onConnectEnd: OnConnectEnd = useCallback(
+    (event, state) => {
+      if (state.isValid || state.toNode || !state.fromNode || state.fromNode.type !== "image") return;
+      if (state.fromHandle?.type !== "source") return;
+      const pt = "changedTouches" in event ? event.changedTouches[0] : (event as MouseEvent);
+      const box = (document.querySelector(".board") as HTMLElement | null)?.getBoundingClientRect();
+      setPicker({
+        screen: { x: pt.clientX - (box?.left ?? 0), y: pt.clientY - (box?.top ?? 0) },
+        flow: rf.screenToFlowPosition({ x: pt.clientX, y: pt.clientY }),
+        source: state.fromNode.id,
+      });
+    },
+    [rf],
+  );
+  const pickTool = useCallback(
+    (workflow: string) => {
+      if (!picker) return;
+      setPicker(null);
+      // The block's first input sits about 120 px below its top edge; line it up with the drop point.
+      const toolId = addTool(workflow, { x: picker.flow.x + 20, y: picker.flow.y - 120 }, [picker.source], true);
+      const wf = workflows.get(workflow);
+      if (toolId && wf && wf.params.every((p) => p.kind !== "text")) window.setTimeout(() => runTool(toolId), 80);
+    },
+    [addTool, picker, runTool, workflows],
+  );
+
   // ---------- sections carry their contents ----------
   const dragGroup = useRef<{ id: string; start: { x: number; y: number }; members: Map<string, { x: number; y: number }> } | null>(null);
   const onNodeDragStart: OnNodeDrag<BoardNode> = useCallback((_, node) => {
@@ -531,6 +561,9 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onConnectEnd={onConnectEnd}
+          onPaneClick={() => setPicker(null)}
+          onMoveStart={() => setPicker(null)}
           isValidConnection={isValidConnection}
           onNodeDragStart={onNodeDragStart}
           onNodeDrag={onNodeDrag}
@@ -599,6 +632,14 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
             </div>
             <p>Drop or paste images anywhere. Connect images to tool blocks; results land beside the block.</p>
           </div>
+        )}
+        {picker && (
+          <ToolPicker
+            at={picker.screen}
+            workflows={catalogue.workflows.filter((w) => w.inputs.some((i) => i.kind === "image" && i.required))}
+            onPick={pickTool}
+            onClose={() => setPicker(null)}
+          />
         )}
         {toast && <div className="toast">{toast}</div>}
       </div>
