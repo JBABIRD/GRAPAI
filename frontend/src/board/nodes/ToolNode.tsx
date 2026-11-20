@@ -13,6 +13,8 @@ const PROMPT_CHIPS: Record<string, string[]> = {
 
 const LABELS: Record<string, string> = {
   design_5: "5 views",
+  keep: "Keep as is",
+  ground: "Stand on ground",
   ortho_4: "Ortho 4",
   turnaround_8: "8 around",
   same_scene: "Same scene",
@@ -112,7 +114,7 @@ function ToolNode({ id, data, selected }: NodeProps<ToolNodeT>) {
             >
               {p.options!.map((o) => (
                 <option key={String(o)} value={String(o)}>
-                  {p.name === "angle" ? `${o}°` : label(o)}
+                  {p.name === "angle" ? `${o}°` : p.name === "size" ? `${o}%` : label(o)}
                 </option>
               ))}
             </select>

@@ -265,3 +265,15 @@ def test_inpaint_without_ref1_drops_the_chain():
     p.run(JobInput(images={"image": src, "mask": mask}, params={"mode": "fast", "count": 1, "seed": 1}))
     assert "40" not in srv.graph and "42" not in srv.graph
     assert srv.graph["35"]["inputs"]["conditioning"] == ["20", 0]
+
+
+def test_place_product_shrinks_onto_ground():
+    src = Image.new("RGB", (1000, 800), "white")
+    src.paste((200, 30, 30), (300, 100, 700, 700))
+    alpha = Image.new("L", src.size, 0)
+    alpha.paste(255, (300, 100, 700, 700))
+    product, a = comfy.place_product(src, alpha, 0.5, "ground")
+    x0, y0, x1, y1 = a.getbbox()
+    assert (x1 - x0, y1 - y0) == (200, 300)
+    assert abs((x0 + x1) / 2 - 500) <= 1 and abs(y1 - 720) <= 1
+    assert product.getpixel((500, 600)) == (200, 30, 30)

@@ -454,11 +454,39 @@ class ComfyEnvSwap(ComfyInpaint):
         src = imaging.flatten(job.images["image"])
         env = imaging.flatten(job.images["environment"])
         alpha = product_alpha(job, src)
-        backdrop = imaging.cover(env, src.size)
-        start = Image.composite(src, backdrop, alpha)
+        product, alpha = place_product(src, alpha, float(job.params.get("size", 100)) / 100,
+                                       str(job.params.get("placement", "keep")))
+        # Start from a heavily blurred environment (the sharp one is image 2): with a sharp start klein just
+        # kept the reference and ignored the description; the blur lets it reshape the scene around the product.
+        mp = float(load_template(self.template_name(job), self.target(job)[1]).get("_meta", {}).get("megapixels", 1.0))
+        scale = src.width / _size_for(src.size, mp)["width"]
+        backdrop = imaging.cover(env, src.size).filter(ImageFilter.GaussianBlur(40 * scale))
+        start = Image.composite(product, backdrop, alpha)
         hole = alpha.point(lambda v: 0 if v > 127 else 255)  # everything that isn't the product
         outs = self.inpaint(job, start, hole, prompts.envswap_prompt(job.params), grow=9, blur=6, ref1=env)
         return [Output(image=o, meta={"seed": job.seed()}) for o in outs]
+
+
+def place_product(src: Image.Image, alpha: Image.Image, size: float, placement: str) -> tuple[Image.Image, Image.Image]:
+    """Rescale the cut-out (size < 1 shrinks it about its base) and optionally stand it bottom-centre."""
+    box = alpha.point(lambda v: 255 if v > 127 else 0).getbbox()
+    if not box or (size >= 0.999 and placement == "keep"):
+        return src, alpha
+    x0, y0, x1, y1 = box
+    w, h = x1 - x0, y1 - y0
+    nw, nh = max(1, round(w * size)), max(1, round(h * size))
+    piece = src.crop(box).resize((nw, nh), Image.LANCZOS)
+    mask = alpha.crop(box).resize((nw, nh), Image.LANCZOS)
+    if placement == "ground":
+        cx, base = src.width / 2, src.height * 0.9
+    else:
+        cx, base = (x0 + x1) / 2, y1  # keep its footprint where it was
+    px, py = round(cx - nw / 2), round(min(base, src.height) - nh)
+    product = Image.new("RGB", src.size)
+    product.paste(piece, (px, py))
+    new_alpha = Image.new("L", src.size, 0)
+    new_alpha.paste(mask, (px, py))
+    return product, new_alpha
 
 
 def product_alpha(job: JobInput, src: Image.Image) -> Image.Image:

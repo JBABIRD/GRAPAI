@@ -148,7 +148,8 @@ def envswap_prompt(params: dict) -> str:
     text = (f"Image 1 shows the {what} standing in a new environment. Rebuild the whole environment around the "
             f"{what} as a coherent photograph based on the environment in image 2")
     text += f": {desc}." if desc else "."
-    text += (f" Match perspective, horizon, scale and lighting to the {what}, with natural contact shadows and "
-             "reflections on the ground. Image 2 is only an environment reference: none of its vehicles, people or "
-             f"objects may appear. Keep the {what} itself exactly unchanged.")
+    text += (f" The {what} stands on the ground or surface of this environment and casts a soft contact shadow; "
+             f"match perspective, horizon, scale and lighting to the {what}, with natural reflections. Image 2 is only "
+             "an environment reference: none of its vehicles, people or objects may appear. "
+             f"Keep the {what} itself exactly unchanged.")
     return text
