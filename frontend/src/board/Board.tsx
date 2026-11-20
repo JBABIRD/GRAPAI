@@ -309,7 +309,8 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
       const tool: ToolNodeT = {
         id: uid("tool"),
         type: "tool",
-        position: exact ? pos : rowSpot(nodesRef.current, pos, rowWidth(wf), 200 + wf.inputs.length * 30 + wf.params.length * 40),
+        // Reserve the taller of the block and its results so both fit on the same row.
+        position: exact ? pos : rowSpot(nodesRef.current, pos, rowWidth(wf), Math.max(200 + wf.inputs.length * 30 + wf.params.length * 40, 300)),
         width: TOOL_W,
         data: { workflow, params, status: "idle" } satisfies ToolData,
       };
