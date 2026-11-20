@@ -379,6 +379,12 @@ class ComfyOutpaint(ComfyInpaint):
         left, top, right, bottom = imaging.outpaint_pads(job.params, src.size)
         arr = np.pad(np.asarray(src), ((top, bottom), (left, right), (0, 0)), mode="edge")
         canvas = Image.fromarray(arr)
+        # Heavily blur the stretched border (60 px at the ~1 MP working size) so klein doesn't copy its
+        # streaks; the original goes back unblurred. Tested on the laptop: no streaks or sky blocks.
+        mp = float(load_template(self.template_name(job), self.target(job)[1]).get("_meta", {}).get("megapixels", 1.0))
+        work_w = _size_for(canvas.size, mp)["width"]
+        canvas = canvas.filter(ImageFilter.GaussianBlur(60 * canvas.width / work_w))
+        canvas.paste(src, (left, top))
         hole = Image.new("L", canvas.size, 255)
         hole.paste(0, (left, top, left + src.width, top + src.height))
         outs = self.inpaint(job, canvas, hole, prompts.outpaint_prompt(job.params), grow=2 * 24 + 1, blur=10)
