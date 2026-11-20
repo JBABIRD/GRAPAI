@@ -356,8 +356,12 @@ class ComfyErase(ComfyInpaint):
         if box is None:
             raise ValueError("The mask is empty: paint over the object to erase first")
         crop = src.crop(box)
+        # Grow/blur were tuned on the whole image at ~1 MP; the crop is magnified more, so scale them
+        # to cover the same part of the object's edge.
+        k = ((src.width * src.height) / max(1, crop.width * crop.height)) ** 0.5
+        grow, blur = min(61, int(15 * k)), min(30.0, 8 * k)
         outs = []
-        for patch in self.inpaint(job, crop, hole.crop(box), prompts.erase_prompt(job.params), grow=15, blur=8):
+        for patch in self.inpaint(job, crop, hole.crop(box), prompts.erase_prompt(job.params), grow=grow, blur=blur):
             full = src.copy()
             full.paste(patch, box[:2])
             outs.append(Output(image=full, meta={"seed": job.seed()}))
@@ -377,6 +381,7 @@ class ComfyOutpaint(ComfyInpaint):
         canvas = Image.fromarray(arr)
         hole = Image.new("L", canvas.size, 255)
         hole.paste(0, (left, top, left + src.width, top + src.height))
-        outs = self.inpaint(job, canvas, hole, prompts.outpaint_prompt(job.params), grow=2 * 24 + 1, blur=10,
-                            reference=src)
+        outs = self.inpaint(job, canvas, hole, prompts.outpaint_prompt(job.params), grow=2 * 24 + 1, blur=10)
+        # Reference = the padded canvas. Tested: the unpadded original as reference duplicated the
+        # subject or left a sky rectangle; the scene description is what fixes weak fills.
         return [Output(image=o, meta={"seed": job.seed()}) for o in outs]

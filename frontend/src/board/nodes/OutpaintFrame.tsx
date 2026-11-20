@@ -11,7 +11,9 @@ type Props = {
   shownW: number;
   pads: Pads;
   onChange: (p: Pads) => void;
-  onGenerate: () => void;
+  /** Starting text for the scene description (e.g. the image's own prompt). */
+  initialPrompt?: string;
+  onGenerate: (prompt: string) => void;
   onCancel: () => void;
 };
 
@@ -37,7 +39,8 @@ export function padsForAspect(p: Pads, w: number, h: number, a: number): Pads {
   return { ...p, top: snap(p.top + add / 2), bottom: snap(p.bottom + add / 2) };
 }
 
-export default function OutpaintFrame({ imgW, imgH, shownW, pads, onChange, onGenerate, onCancel }: Props) {
+export default function OutpaintFrame({ imgW, imgH, shownW, pads, initialPrompt = "", onChange, onGenerate, onCancel }: Props) {
+  const [prompt, setPrompt] = useState(initialPrompt);
   const zoom = useStore((s) => s.transform[2]);
   const s = shownW / imgW; // flow units per source pixel
   const [aspect, setAspect] = useState<string>("Free");
@@ -109,8 +112,19 @@ export default function OutpaintFrame({ imgW, imgH, shownW, pads, onChange, onGe
           </button>
         ))}
         <span className="sep" />
+        <input
+          className="outpaint-prompt"
+          value={prompt}
+          placeholder="Describe the surroundings, e.g. frozen lake, snowy mountains"
+          title="A few words about the scene make the extension much better"
+          onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter" && !(fw === imgW && fh === imgH)) onGenerate(prompt.trim());
+          }}
+        />
         <button onClick={onCancel}>Cancel</button>
-        <button className="primary" onClick={onGenerate} disabled={fw === imgW && fh === imgH}>
+        <button className="primary" onClick={() => onGenerate(prompt.trim())} disabled={fw === imgW && fh === imgH}>
           Extend
         </button>
       </div>

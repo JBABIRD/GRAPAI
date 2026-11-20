@@ -395,11 +395,11 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
   );
 
   const outpaint = useCallback(
-    (nodeId: string, pads: { left: number; top: number; right: number; bottom: number }) => {
+    (nodeId: string, pads: { left: number; top: number; right: number; bottom: number }, prompt = "") => {
       const node = nodesRef.current.find((n) => n.id === nodeId);
       if (!node) return;
       const size = nodeSize(node);
-      const toolId = addTool("outpaint", { x: node.position.x + size.w + 90, y: node.position.y }, [nodeId], false, pads);
+      const toolId = addTool("outpaint", { x: node.position.x + size.w + 90, y: node.position.y }, [nodeId], false, { ...pads, prompt });
       if (toolId) window.setTimeout(() => runTool(toolId), 80);
     },
     [addTool, runTool],

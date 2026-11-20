@@ -160,7 +160,7 @@ WORKFLOWS: dict[str, Workflow] = {
             output="image",
             inputs=[InputSpec(name="image", kind="image", label="Image")],
             params=[
-                ParamSpec(name="prompt", kind="text", label="What's around it (optional)", default=""),
+                ParamSpec(name="prompt", kind="text", label="Describe the surroundings (recommended)", default=""),
                 ParamSpec(name="left", kind="number", label="Left (px)", default=0, min=0, max=4096, step=8),
                 ParamSpec(name="top", kind="number", label="Top (px)", default=0, min=0, max=4096, step=8),
                 ParamSpec(name="right", kind="number", label="Right (px)", default=256, min=0, max=4096, step=8),

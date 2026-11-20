@@ -29,8 +29,9 @@ function ImageNode({ id, data, selected }: NodeProps<ImageNodeT>) {
           pads={extend}
           onChange={setExtend}
           onCancel={() => setExtend(null)}
-          onGenerate={() => {
-            outpaint(id, extend);
+          initialPrompt={sceneFromCaption(data.caption)}
+          onGenerate={(prompt) => {
+            outpaint(id, extend, prompt);
             setExtend(null);
           }}
         />
@@ -66,6 +67,13 @@ function ImageNode({ id, data, selected }: NodeProps<ImageNodeT>) {
       )}
     </div>
   );
+}
+
+/** "Create: orange drill on ice" -> "orange drill on ice"; tool-only captions give nothing. */
+function sceneFromCaption(caption?: string): string {
+  if (!caption) return "";
+  const i = caption.indexOf(": ");
+  return i >= 0 ? caption.slice(i + 2).trim() : "";
 }
 
 export default memo(ImageNode);
