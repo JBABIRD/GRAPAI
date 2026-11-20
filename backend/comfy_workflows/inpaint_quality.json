@@ -1,53 +1,71 @@
 {
   "_meta": {
-    "title": "Erase / outpaint (quality)",
-    "model": "FLUX.2 klein 4B (Apache-2.0)",
+    "title": "Erase / outpaint (quality, rented GPU)",
+    "model": "Qwen-Image-Edit-2511 (Apache-2.0), 20B",
     "files": {
-      "diffusion_models": "flux-2-klein-4b-fp8.safetensors",
-      "text_encoders": "qwen_3_4b.safetensors",
-      "vae": "flux2-vae.safetensors"
+      "diffusion_models": "qwen_image_edit_2511_bf16.safetensors",
+      "text_encoders": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "vae": "qwen_image_vae.safetensors"
     },
-    "note": "True inpainting with the image as reference: VAEEncode -> SetLatentNoiseMask, DifferentialDiffusion for a soft edge, ReferenceLatent keeps the scene consistent, ImageCompositeMasked keeps unmasked pixels exact. The mask must be an RGB PNG (LoadImageMask reads the red channel). The reference is the original image only (for outpaint, without the stretched border), so the model does not copy the padding.",
-    "megapixels": 2.0,
+    "note": "True inpainting with Qwen-Image-Edit: the vision-language encoder sees the whole image, SetLatentNoiseMask + DifferentialDiffusion limit generation to the soft mask, ImageCompositeMasked keeps the rest exact. Needs ~24 GB+ (rented GPU).",
+    "megapixels": 1.5,
+    "mode": "quality: 30 steps, cfg 4",
     "placeholders": [
       "image",
       "mask",
-      "reference",
       "prompt",
-      "width",
-      "height",
+      "negative",
       "seed"
     ]
   },
   "1": {
     "class_type": "UNETLoader",
     "inputs": {
-      "unet_name": "flux-2-klein-4b-fp8.safetensors",
+      "unet_name": "qwen_image_edit_2511_bf16.safetensors",
       "weight_dtype": "default"
     }
   },
   "2": {
     "class_type": "CLIPLoader",
     "inputs": {
-      "clip_name": "qwen_3_4b.safetensors",
-      "type": "flux2",
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
       "device": "default"
     }
   },
   "3": {
     "class_type": "VAELoader",
     "inputs": {
-      "vae_name": "flux2-vae.safetensors"
+      "vae_name": "qwen_image_vae.safetensors"
     }
   },
   "5": {
-    "class_type": "CLIPTextEncode",
+    "class_type": "ModelSamplingAuraFlow",
     "inputs": {
-      "clip": [
-        "2",
+      "model": [
+        "1",
         0
       ],
-      "text": "{{prompt}}"
+      "shift": 3.1
+    }
+  },
+  "6": {
+    "class_type": "CFGNorm",
+    "inputs": {
+      "model": [
+        "5",
+        0
+      ],
+      "strength": 1.0
+    }
+  },
+  "7": {
+    "class_type": "DifferentialDiffusion",
+    "inputs": {
+      "model": [
+        "6",
+        0
+      ]
     }
   },
   "10": {
@@ -63,7 +81,43 @@
       "channel": "red"
     }
   },
-  "14": {
+  "20": {
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "inputs": {
+      "clip": [
+        "2",
+        0
+      ],
+      "prompt": "{{prompt}}",
+      "vae": [
+        "3",
+        0
+      ],
+      "image1": [
+        "10",
+        0
+      ]
+    }
+  },
+  "21": {
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "inputs": {
+      "clip": [
+        "2",
+        0
+      ],
+      "prompt": "{{negative}}",
+      "vae": [
+        "3",
+        0
+      ],
+      "image1": [
+        "10",
+        0
+      ]
+    }
+  },
+  "22": {
     "class_type": "VAEEncode",
     "inputs": {
       "pixels": [
@@ -76,11 +130,11 @@
       ]
     }
   },
-  "15": {
+  "23": {
     "class_type": "SetLatentNoiseMask",
     "inputs": {
       "samples": [
-        "14",
+        "22",
         0
       ],
       "mask": [
@@ -89,91 +143,38 @@
       ]
     }
   },
-  "16": {
-    "class_type": "DifferentialDiffusion",
+  "30": {
+    "class_type": "KSampler",
     "inputs": {
       "model": [
-        "1",
-        0
-      ]
-    }
-  },
-  "20": {
-    "class_type": "ReferenceLatent",
-    "inputs": {
-      "conditioning": [
-        "5",
+        "7",
         0
       ],
-      "latent": [
-        "13",
-        0
-      ]
-    }
-  },
-  "32": {
-    "class_type": "Flux2Scheduler",
-    "inputs": {
-      "steps": 12,
-      "width": "{{width}}",
-      "height": "{{height}}"
-    }
-  },
-  "33": {
-    "class_type": "RandomNoise",
-    "inputs": {
-      "noise_seed": "{{seed}}"
-    }
-  },
-  "34": {
-    "class_type": "KSamplerSelect",
-    "inputs": {
-      "sampler_name": "euler"
-    }
-  },
-  "35": {
-    "class_type": "BasicGuider",
-    "inputs": {
-      "model": [
-        "16",
-        0
-      ],
-      "conditioning": [
+      "seed": "{{seed}}",
+      "steps": 30,
+      "cfg": 4.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "positive": [
         "20",
         0
-      ]
-    }
-  },
-  "36": {
-    "class_type": "SamplerCustomAdvanced",
-    "inputs": {
-      "noise": [
-        "33",
-        0
       ],
-      "guider": [
-        "35",
-        0
-      ],
-      "sampler": [
-        "34",
-        0
-      ],
-      "sigmas": [
-        "32",
+      "negative": [
+        "21",
         0
       ],
       "latent_image": [
-        "15",
+        "23",
         0
-      ]
+      ],
+      "denoise": 1.0
     }
   },
-  "37": {
+  "31": {
     "class_type": "VAEDecode",
     "inputs": {
       "samples": [
-        "36",
+        "30",
         0
       ],
       "vae": [
@@ -182,7 +183,7 @@
       ]
     }
   },
-  "39": {
+  "33": {
     "class_type": "ImageCompositeMasked",
     "inputs": {
       "destination": [
@@ -190,7 +191,7 @@
         0
       ],
       "source": [
-        "37",
+        "31",
         0
       ],
       "x": 0,
@@ -202,33 +203,14 @@
       ]
     }
   },
-  "38": {
+  "32": {
     "class_type": "SaveImage",
     "inputs": {
       "images": [
-        "39",
+        "33",
         0
       ],
       "filename_prefix": "ductus/inpaint"
-    }
-  },
-  "12": {
-    "class_type": "LoadImage",
-    "inputs": {
-      "image": "{{reference}}"
-    }
-  },
-  "13": {
-    "class_type": "VAEEncode",
-    "inputs": {
-      "pixels": [
-        "12",
-        0
-      ],
-      "vae": [
-        "3",
-        0
-      ]
     }
   }
 }
