@@ -46,6 +46,22 @@ const hit = (a: Box, b: Box, gap = 24) =>
   a.x < b.x + b.w + gap && a.x + a.w + gap > b.x && a.y < b.y + b.h + gap && a.y + a.h + gap > b.y;
 
 /** Move a box down until it no longer overlaps anything on the board (sections excepted). */
+/**
+ * First free spot straight below `pos` (same x, 40 px steps), so a new row stays as close to its
+ * source as the board allows instead of jumping under a whole column of blockers.
+ */
+export function rowSpot(nodes: BoardNode[], pos: { x: number; y: number }, w: number, h: number, ignore: Set<string> = new Set()) {
+  const boxes = nodes
+    .filter((n) => n.type !== "section" && !ignore.has(n.id))
+    .map((n) => ({ x: n.position.x, y: n.position.y, ...(() => { const s = nodeSize(n); return { w: s.w, h: s.h }; })() }));
+  const box = { x: pos.x, y: pos.y, w, h };
+  for (let i = 0; i < 2000; i++) {
+    if (!boxes.some((b) => hit(box, b))) return { x: box.x, y: box.y };
+    box.y += 40;
+  }
+  return freeSpot(nodes, pos, w, h, ignore);
+}
+
 export function freeSpot(nodes: BoardNode[], pos: { x: number; y: number }, w: number, h: number, ignore: Set<string> = new Set()) {
   const boxes = nodes
     .filter((n) => n.type !== "section" && !ignore.has(n.id))

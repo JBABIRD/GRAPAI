@@ -33,6 +33,7 @@ import type {
   ToolData,
   ToolNodeT,
   VideoNodeT,
+  Workflow,
 } from "../types";
 import { BoardContext, type BoardActions } from "./BoardContext";
 import CompareNode from "./nodes/CompareNode";
@@ -43,7 +44,7 @@ import ToolNode from "./nodes/ToolNode";
 import VideoNode from "./nodes/VideoNode";
 import Toolbar from "./Toolbar";
 import ToolPicker from "./ToolPicker";
-import { IMAGE_W, TOOL_W, fitSize, freeSpot, inside, nodeSize, uid } from "./util";
+import { IMAGE_W, TOOL_W, fitSize, freeSpot, rowSpot, inside, nodeSize, uid } from "./util";
 
 const nodeTypes: NodeTypes = { image: ImageNode, video: VideoNode, note: NoteNode, section: SectionNode, tool: ToolNode, compare: CompareNode };
 
@@ -58,6 +59,13 @@ type EditorTarget = { nodeId: string | null; url: string | null; maskUrl: string
 const IMAGE_INPUT_NODES = new Set(["image"]);
 
 // Compare is a board tool, not an AI workflow; it shares the picker's list format.
+/** Width a block needs on its row: itself plus the results it will place to its right. */
+function rowWidth(wf: Workflow) {
+  const count = Number(wf.params.find((p) => p.name === "count")?.default ?? 1);
+  const each = wf.output === "video" ? 424 : 284;
+  return TOOL_W + 90 + count * each;
+}
+
 /** Tools whose text field is optional: run straight away from the image toolbar. */
 const AUTO_RUN = new Set(["erase", "style"]);
 
@@ -164,22 +172,16 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
         .filter((e) => e.source === toolId)
         .map((e) => ns.find((n) => n.id === e.target))
         .filter(Boolean) as BoardNode[];
+      // One row to the right of the block, top-aligned with it; later runs go in a new row just below.
       const x0 = tool.position.x + toolSize.w + 90;
       let y = prior.length ? Math.max(...prior.map((n) => n.position.y + nodeSize(n).h)) + 40 : tool.position.y;
-      const cols = outputs.length > 2 ? 2 : outputs.length;
+      let x = x0;
       const created: BoardNode[] = [];
-      let rowH = 0;
-      outputs.forEach((o, i) => {
-        const col = i % cols;
-        if (i > 0 && col === 0) {
-          y += rowH + 24;
-          rowH = 0;
-        }
+      outputs.forEach((o) => {
         const w = o.kind === "video" ? 400 : 260;
         const size = fitSize(o.asset.width ?? o.poster?.width ?? 16, o.asset.height ?? o.poster?.height ?? 9, w);
-        const pos = freeSpot([...ns, ...created], { x: x0 + col * (w + 24), y }, size.width, size.height + 20);
-        if (pos.y !== y && col === 0) y = pos.y;
-        rowH = Math.max(rowH, size.height + (pos.y - y));
+        const pos = rowSpot([...ns, ...created], { x, y }, size.width, size.height + 20);
+        x = pos.x + size.width + 24;
         if (o.kind === "video") {
           created.push({
             id: uid("vid"),
@@ -307,7 +309,7 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
       const tool: ToolNodeT = {
         id: uid("tool"),
         type: "tool",
-        position: exact ? pos : freeSpot(nodesRef.current, pos, TOOL_W, 200 + wf.inputs.length * 30 + wf.params.length * 40),
+        position: exact ? pos : rowSpot(nodesRef.current, pos, rowWidth(wf), 200 + wf.inputs.length * 30 + wf.params.length * 40),
         width: TOOL_W,
         data: { workflow, params, status: "idle" } satisfies ToolData,
       };
@@ -356,7 +358,7 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
       const node: CompareNodeT = {
         id: uid("cmp"),
         type: "compare",
-        position: exact ? pos : freeSpot(nodesRef.current, pos, w, h),
+        position: exact ? pos : rowSpot(nodesRef.current, pos, w, h),
         width: w,
         height: h,
         data: { split: 0.5 },
