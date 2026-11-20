@@ -19,6 +19,7 @@ REGISTRY: dict[str, dict[str, str]] = {
     "render": {"mock": "mock:MockRender", "comfy": "comfy:ComfyRender"},
     "edit": {"mock": "mock:MockEdit", "comfy": "comfy:ComfyEdit"},
     "new_view": {"mock": "mock:MockNewView", "comfy": "comfy:ComfyNewView"},
+    "envswap": {"mock": "mock:MockEnvSwap", "comfy": "comfy:ComfyEnvSwap"},
     "views": {"mock": "mock:MockViews", "comfy": "comfy:ComfyViews"},
     "style": {"mock": "mock:MockStyle", "comfy": "comfy:ComfyStyle"},
     "erase": {"mock": "mock:MockErase", "comfy": "comfy:ComfyErase"},

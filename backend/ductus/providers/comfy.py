@@ -347,7 +347,8 @@ class ComfyInpaint(ComfyProvider):
     backend, template_base = "comfy", "inpaint"
 
     def inpaint(self, job: JobInput, image: Image.Image, hole: Image.Image, prompt: str,
-                grow: int, blur: float, reference: Image.Image | None = None) -> list[Image.Image]:
+                grow: int, blur: float, reference: Image.Image | None = None,
+                ref1: Image.Image | None = None) -> list[Image.Image]:
         """Fill the white part of `hole` (full-res, binary) in `image`. `grow`/`blur` are in pixels at
         the model's working size (~1 MP), so they behave the same for any input size."""
         template = self.prepare(job)
@@ -366,11 +367,16 @@ class ComfyInpaint(ComfyProvider):
             rs = _size_for(reference.size, float(self.template_meta.get("megapixels", 1.0)))
             ref_name = self.client.upload_image(reference.resize((rs["width"], rs["height"]), Image.LANCZOS), "reference")
         full_soft = soft.resize(image.size, Image.BILINEAR)
+        ref1_name = None
+        if ref1 is not None:
+            r1 = _size_for(ref1.size, 1.0)
+            ref1_name = self.client.upload_image(ref1.resize((r1["width"], r1["height"]), Image.LANCZOS), "ref1")
         count, seed = int(job.params.get("count", 1) or 1), job.seed()
         outs: list[Image.Image] = []
         for i in range(count):
             job.progress(i / count, f"generating {i + 1}/{count}")
-            graph = fill_template(template, {"prompt": prompt, "image": img_name, "mask": mask_name, "reference": ref_name, "negative": prompts.INPAINT_NEGATIVE,
+            graph = fill_template(template, {"prompt": prompt, "image": img_name, "mask": mask_name, "reference": ref_name, "ref1": ref1_name,
+                                             "negative": prompts.INPAINT_NEGATIVE,
                                              "seed": seed + i, **size})
             for f in self.client.run(graph, lambda p, m="": job.progress((i + p) / count, m)):
                 if f["filename"].lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
@@ -436,3 +442,31 @@ class ComfyOutpaint(ComfyInpaint):
         # Reference = the padded canvas. Tested: the unpadded original as reference duplicated the
         # subject or left a sky rectangle; the scene description is what fixes weak fills.
         return [Output(image=o, meta={"seed": job.seed()}) for o in outs]
+
+
+class ComfyEnvSwap(ComfyInpaint):
+    """Environment swap: cut the product out (BiRefNet), stand it in the reference's environment, and let
+    klein rebuild everything around it with the reference as image 2. The product's pixels stay exact."""
+
+    workflow, model = "envswap", "BiRefNet + FLUX.2 klein 4B (inpaint)"
+
+    def run(self, job: JobInput) -> list[Output]:
+        src = imaging.flatten(job.images["image"])
+        env = imaging.flatten(job.images["environment"])
+        alpha = product_alpha(job, src)
+        backdrop = imaging.cover(env, src.size)
+        start = Image.composite(src, backdrop, alpha)
+        hole = alpha.point(lambda v: 0 if v > 127 else 255)  # everything that isn't the product
+        outs = self.inpaint(job, start, hole, prompts.envswap_prompt(job.params), grow=9, blur=6, ref1=env)
+        return [Output(image=o, meta={"seed": job.seed()}) for o in outs]
+
+
+def product_alpha(job: JobInput, src: Image.Image) -> Image.Image:
+    """Product mask from the image's own alpha, or from the background-removal model."""
+    img = job.images["image"]
+    if img.mode == "RGBA" and img.split()[3].getextrema()[0] < 250:
+        return img.split()[3].resize(src.size)
+    from . import get_provider
+
+    cut = get_provider("remove_bg").run(JobInput(images={"image": src}, params={}, progress=job.progress))[0].image
+    return cut.convert("RGBA").split()[3].resize(src.size)

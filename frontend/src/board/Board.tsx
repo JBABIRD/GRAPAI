@@ -67,7 +67,7 @@ function rowWidth(wf: Workflow) {
 }
 
 /** Tools whose text field is optional: run straight away from the image toolbar. */
-const AUTO_RUN = new Set(["erase", "style", "views"]);
+const AUTO_RUN = new Set(["erase", "style", "views", "envswap"]);
 
 const COMPARE_ENTRY = {
   id: "compare",
@@ -348,13 +348,13 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
       // Edit takes extra selected images as references (@2, @3); other tools use just this one.
       // Edit takes extra selected images as references (@2, @3); Style takes one as the style.
       const selected =
-        workflow === "edit" || workflow === "style"
+        workflow === "edit" || workflow === "style" || workflow === "envswap"
           ? ns.filter((n) => n.selected && n.type === "image" && n.id !== nodeId).map((n) => n.id)
           : [];
       const size = nodeSize(node);
       const toolId = addTool(workflow, { x: node.position.x + size.w + 90, y: node.position.y }, [nodeId, ...selected]);
       const wf = workflows.get(workflow);
-      const ready = workflow !== "style" || selected.length > 0;
+      const ready = (workflow !== "style" && workflow !== "envswap") || selected.length > 0;
       if (toolId && wf && ready && (AUTO_RUN.has(workflow) || wf.params.every((p) => p.kind !== "text"))) {
         window.setTimeout(() => runTool(toolId), 80);
       }

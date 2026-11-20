@@ -237,3 +237,31 @@ def test_views_one_run_per_view_same_seed():
     texts = [json.dumps(g) for g in graphs]
     assert all('"noise_seed": 5' in t or '"seed": 5' in t for t in texts)
     assert "studio backdrop" in texts[0] and "top view" in texts[3]
+
+
+def test_envswap_keeps_product_and_sends_environment():
+    srv = _BlueServer()
+    p = comfy.ComfyEnvSwap()
+    p.client = srv
+    src = Image.new("RGB", (800, 600), (240, 240, 240))
+    src.paste((200, 30, 30), (300, 200, 500, 400))  # the "product"
+    env = Image.new("RGB", (1200, 500), (20, 120, 40))
+    outs = p.run(JobInput(images={"image": src, "environment": env},
+                          params={"mode": "fast", "count": 1, "seed": 3, "what": "red box"}))
+    out = outs[0].image
+    assert out.getpixel((400, 300)) == (200, 30, 30)  # product untouched
+    assert out.getpixel((20, 20))[2] > 200             # surroundings generated
+    assert "ref1" in srv.uploads and srv.graph["40"]["inputs"]["image"] == "ref1.png"
+    assert "red box" in srv.graph["5"]["inputs"]["text"]
+
+
+def test_inpaint_without_ref1_drops_the_chain():
+    srv = _BlueServer()
+    p = comfy.ComfyErase()
+    p.client = srv
+    src = Image.new("RGB", (400, 400), "white")
+    mask = Image.new("L", src.size, 0)
+    mask.paste(255, (150, 150, 250, 250))
+    p.run(JobInput(images={"image": src, "mask": mask}, params={"mode": "fast", "count": 1, "seed": 1}))
+    assert "40" not in srv.graph and "42" not in srv.graph
+    assert srv.graph["35"]["inputs"]["conditioning"] == ["20", 0]

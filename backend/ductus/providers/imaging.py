@@ -319,3 +319,12 @@ def dilate(mask: Image.Image, radius: int) -> Image.Image:
     m = (np.asarray(mask.convert("L"), dtype=np.float32) > 127).astype(np.float32)
     grown = _box_blur(m, radius) > 1e-4
     return Image.fromarray((grown * 255).astype(np.uint8))
+
+
+def cover(image: Image.Image, size: tuple[int, int]) -> Image.Image:
+    """Scale and centre-crop `image` to fill `size` (like CSS object-fit: cover)."""
+    w, h = size
+    k = max(w / image.width, h / image.height)
+    big = image.convert("RGB").resize((max(w, round(image.width * k)), max(h, round(image.height * k))), Image.LANCZOS)
+    x, y = (big.width - w) // 2, (big.height - h) // 2
+    return big.crop((x, y, x + w, y + h))

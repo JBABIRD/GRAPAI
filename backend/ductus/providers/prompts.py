@@ -138,3 +138,15 @@ def view_prompt(params: dict, view: str) -> str:
     else:
         text += " Keep the same environment, ground, background and lighting, seen from this new angle."
     return text
+
+
+def envswap_prompt(params: dict) -> str:
+    what = str(params.get("what", "")).strip().rstrip(".") or "product"
+    desc = str(params.get("prompt", "")).strip().rstrip(".")
+    text = (f"Image 1 shows the {what} standing in a new environment. Rebuild the whole environment around the "
+            f"{what} as a coherent photograph based on the environment in image 2")
+    text += f": {desc}." if desc else "."
+    text += (f" Match perspective, horizon, scale and lighting to the {what}, with natural contact shadows and "
+             "reflections on the ground. Image 2 is only an environment reference: none of its vehicles, people or "
+             f"objects may appear. Keep the {what} itself exactly unchanged.")
+    return text

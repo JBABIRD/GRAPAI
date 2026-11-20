@@ -56,6 +56,12 @@ function ImageNode({ id, data, selected }: NodeProps<ImageNodeT>) {
         >
           Style
         </button>
+        <button
+          onClick={() => quickAction(id, "envswap")}
+          title="Environment swap: keep the product, take the setting from a reference photo (connect it to Environment)"
+        >
+          Environment
+        </button>
         <button onClick={() => compareWith(id)} title="Before/after slider against the image this came from">
           Compare
         </button>

@@ -149,3 +149,11 @@ def test_views_returns_labelled_set(client, sketch):
     job = wait(client, r.json()["id"])
     assert job["status"] == "done", job
     assert [o["meta"]["view"] for o in job["outputs"]] == ["Front", "Left side", "Rear", "3/4 front left", "3/4 rear right"]
+
+
+def test_envswap_preview(client, sketch):
+    aid = upload(client, sketch)
+    eid = upload(client, Image.new("RGB", (300, 200), (30, 90, 160)))
+    r = client.post("/api/jobs", json={"workflow": "envswap", "inputs": {"image": aid, "environment": eid}, "params": {}})
+    job = wait(client, r.json()["id"])
+    assert job["status"] == "done", job

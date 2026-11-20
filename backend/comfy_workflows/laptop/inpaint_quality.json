@@ -17,8 +17,20 @@
       "negative",
       "width",
       "height",
-      "seed"
-    ]
+      "seed",
+      "ref1 (optional)"
+    ],
+    "optional": {
+      "ref1": {
+        "drop": [
+          "40",
+          "41"
+        ],
+        "bypass": {
+          "42": "conditioning"
+        }
+      }
+    }
   },
   "1": {
     "class_type": "UNETLoader",
@@ -250,7 +262,7 @@
         0
       ],
       "positive": [
-        "20",
+        "42",
         0
       ],
       "negative": [
@@ -258,6 +270,38 @@
         0
       ],
       "cfg": 3.0
+    }
+  },
+  "40": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{ref1}}"
+    }
+  },
+  "41": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "40",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "42": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "20",
+        0
+      ],
+      "latent": [
+        "41",
+        0
+      ]
     }
   }
 }

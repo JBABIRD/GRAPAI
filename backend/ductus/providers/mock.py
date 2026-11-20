@@ -339,3 +339,15 @@ class MockViews(Provider):
         src = _fit(imaging.flatten(job.images["image"]))
         views = VIEW_SETS.get(str(job.params.get("set", "design_5")), VIEW_SETS["design_5"])
         return [Output(image=_rotate_view(src, self.ANGLES[v]), meta={"view": VIEW_LABELS[v]}) for v in views]
+
+
+class MockEnvSwap(Provider):
+    """Preview stand-in: the cut-out pasted onto the environment, no AI."""
+
+    workflow, backend, model = "envswap", "mock", "procedural"
+
+    def run(self, job: JobInput) -> list[Output]:
+        src = imaging.flatten(job.images["image"])
+        cut = MockRemoveBg().run(JobInput(images={"image": src}, params={}))[0].image
+        bg = imaging.cover(imaging.flatten(job.images["environment"]), src.size)
+        return [Output(image=Image.composite(src, bg, cut.split()[3]), meta={"seed": job.seed()})]

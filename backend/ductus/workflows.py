@@ -157,6 +157,24 @@ WORKFLOWS: dict[str, Workflow] = {
             license="Apache-2.0",
         ),
         Workflow(
+            id="envswap",
+            name="Environment swap",
+            description="Put the product into the setting of a reference photo. The product is cut out and kept "
+                        "pixel-exact; only the surroundings are generated.",
+            output="image",
+            inputs=[
+                InputSpec(name="image", kind="image", label="Product"),
+                InputSpec(name="environment", kind="image", label="Environment"),
+            ],
+            params=[
+                ParamSpec(name="what", kind="text", label="What is it? (e.g. electric SUV)", default=""),
+                ParamSpec(name="prompt", kind="text", label="Describe the setting (recommended)", default=""),
+                _MODE, _count(2), _SEED,
+            ],
+            model="BiRefNet + FLUX.2 klein 4B",
+            license="MIT / Apache-2.0",
+        ),
+        Workflow(
             id="erase",
             name="Erase object",
             description="Paint a mask over anything (Draw → Mask) and it is removed and filled with background.",
