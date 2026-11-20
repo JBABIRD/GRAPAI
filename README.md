@@ -59,7 +59,7 @@ DUCTUS_PROVIDER=comfy DUCTUS_COMFY_URL=http://<gpu-host>:8188 uvicorn ductus.api
 pip install -e ".[local]"   # BiRefNet + Real-ESRGAN run in-process (CPU works)
 ```
 
-See [docs/comfyui.md](docs/comfyui.md) for the model files and GPU sizing. Each tool's graph lives in `backend/comfy_workflows/` and can be replaced by your own ComfyUI workflow.
+See [docs/comfyui.md](docs/comfyui.md) for the model files and GPU sizing, and [docs/hybrid-setup.md](docs/hybrid-setup.md) to run fast mode on an 8 GB laptop and quality mode plus video on a rented GPU. Each tool's graph lives in `backend/comfy_workflows/` and can be replaced by your own ComfyUI workflow.
 
 Per-tool overrides are possible, for example `DUCTUS_PROVIDER_ANIMATE=mock`.
 

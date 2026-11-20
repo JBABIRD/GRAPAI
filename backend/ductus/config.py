@@ -24,6 +24,8 @@ class Settings:
     device: str = field(default_factory=lambda: _env("DUCTUS_DEVICE", "cuda"))
 
     comfy_url: str = field(default_factory=lambda: _env("DUCTUS_COMFY_URL", "http://127.0.0.1:8188"))
+    # Hybrid setups send each mode (or tool) to its own ComfyUI server, e.g. fast
+    # mode to a laptop and quality mode to a rented GPU. See comfy_target().
     comfy_workflows: Path = field(
         default_factory=lambda: Path(_env("DUCTUS_COMFY_WORKFLOWS", str(Path(__file__).resolve().parent.parent / "comfy_workflows")))
     )
@@ -37,6 +39,24 @@ class Settings:
             "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
         )
     )
+
+    def comfy_target(self, workflow: str, mode: str) -> tuple[str, str]:
+        """(server URL, template profile) for a tool in a mode.
+
+        Most specific wins: DUCTUS_COMFY_URL_<TOOL>_<MODE>, DUCTUS_COMFY_URL_<TOOL>,
+        DUCTUS_COMFY_URL_<MODE>, then DUCTUS_COMFY_URL. Profiles (a subfolder of
+        comfy_workflows/ with lighter graphs, e.g. "laptop") resolve the same way
+        from DUCTUS_COMFY_PROFILE_*.
+        """
+        w, m = workflow.upper(), mode.upper()
+
+        def pick(prefix: str, default: str) -> str:
+            for key in (f"{prefix}_{w}_{m}", f"{prefix}_{w}", f"{prefix}_{m}", prefix):
+                if os.environ.get(key):
+                    return os.environ[key]
+            return default
+
+        return pick("DUCTUS_COMFY_URL", self.comfy_url).rstrip("/"), pick("DUCTUS_COMFY_PROFILE", "")
 
     def provider_for(self, workflow: str) -> str:
         """Per-workflow override, e.g. DUCTUS_PROVIDER_ANIMATE=mock."""

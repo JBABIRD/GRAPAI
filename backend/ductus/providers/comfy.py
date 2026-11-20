@@ -39,8 +39,31 @@ class ComfyError(RuntimeError):
 def fill_template(graph: dict, values: dict[str, Any]) -> dict:
     """Substitute {{name}} placeholders and prune nodes whose placeholder is unset."""
     graph = copy.deepcopy(graph)
-    graph.pop("_meta", None)
+    meta = graph.pop("_meta", None) or {}
     dropped: set[str] = set()
+    # Optional chains: when a value is missing, drop its nodes and bypass the
+    # nodes that merged it in (e.g. a ReferenceLatent passes its conditioning on).
+    alias: dict[str, list] = {}
+    for name, spec in (meta.get("optional") or {}).items():
+        if values.get(name) is not None:
+            continue
+        for nid in spec.get("drop", []):
+            graph.pop(str(nid), None)
+        for nid, through in (spec.get("bypass") or {}).items():
+            node = graph.pop(str(nid), None)
+            if node is not None:
+                alias[str(nid)] = node["inputs"][through]
+
+    def resolve(link):
+        seen = 0
+        while isinstance(link, list) and len(link) == 2 and str(link[0]) in alias and seen < 64:
+            link, seen = alias[str(link[0])], seen + 1
+        return link
+
+    if alias:
+        for node in graph.values():
+            for key, val in list(node.get("inputs", {}).items()):
+                node["inputs"][key] = resolve(val)
     for node_id, node in graph.items():
         for key, val in list(node.get("inputs", {}).items()):
             if isinstance(val, str):
@@ -116,11 +139,13 @@ class ComfyClient:
         return r.content
 
 
-def load_template(name: str) -> dict:
-    path = Path(settings.comfy_workflows) / f"{name}.json"
-    if not path.exists():
-        raise ComfyError(f"missing ComfyUI template {path}")
-    return json.loads(path.read_text())
+def load_template(name: str, profile: str = "") -> dict:
+    """A profile folder (e.g. comfy_workflows/laptop/) overrides the default graph."""
+    root = Path(settings.comfy_workflows)
+    for path in ([root / profile / f"{name}.json"] if profile else []) + [root / f"{name}.json"]:
+        if path.exists():
+            return json.loads(path.read_text())
+    raise ComfyError(f"missing ComfyUI template {name}.json (profile {profile or 'default'})")
 
 
 class ComfyProvider(Provider):
@@ -128,17 +153,34 @@ class ComfyProvider(Provider):
     template_base = ""
 
     def __init__(self):
-        self.client = ComfyClient()
+        # Tests inject a fake here; otherwise a client is made per job so each
+        # mode can go to its own server.
+        self.client: Any = None
+        self.template_meta: dict = {}
+
+    def mode(self, job: JobInput) -> str:
+        return str(job.params.get("mode", "fast"))
+
+    def target(self, job: JobInput) -> tuple[str, str]:
+        return settings.comfy_target(self.workflow, self.mode(job))
+
+    def prepare(self, job: JobInput) -> dict:
+        """Pick server and graph for this job; returns the template."""
+        url, profile = self.target(job)
+        if self.client is None or getattr(self.client, "base_url", url) != url:
+            self.client = ComfyClient(url)
+        template = load_template(self.template_name(job), profile)
+        self.template_meta = template.get("_meta", {})
+        return template
 
     def template_name(self, job: JobInput) -> str:
-        mode = str(job.params.get("mode", "fast"))
-        return f"{self.template_base}_{mode}"
+        return f"{self.template_base}_{self.mode(job)}"
 
     def values(self, job: JobInput) -> dict[str, Any]:  # pragma: no cover - per workflow
         raise NotImplementedError
 
     def run_images(self, job: JobInput, count_key: str = "count") -> list[Output]:
-        template = load_template(self.template_name(job))
+        template = self.prepare(job)
         base_values = self.values(job)
         count, seed = int(job.params.get(count_key, 1) or 1), job.seed()
         outs: list[Output] = []
@@ -164,6 +206,14 @@ def _upload_inputs(client: ComfyClient, job: JobInput, names: list[str]) -> dict
     return out
 
 
+def _megapixel_size(job: JobInput, megapixels: float = 1.0, multiple: int = 16) -> dict[str, int]:
+    """Output size for graphs that need one (FLUX.2): the input's aspect at ~1 MP."""
+    w, h = job.images["image"].size
+    k = (megapixels * 1024 * 1024 / max(1, w * h)) ** 0.5
+    return {"width": max(multiple, round(w * k / multiple) * multiple),
+            "height": max(multiple, round(h * k / multiple) * multiple)}
+
+
 class ComfyCreate(ComfyProvider):
     workflow, template_base, model = "create", "create", "Z-Image-Turbo / Qwen-Image"
 
@@ -178,7 +228,7 @@ class ComfyEdit(ComfyProvider):
     def values(self, job: JobInput) -> dict[str, Any]:
         files = _upload_inputs(self.client, job, ["image", "ref1", "ref2"])
         n_refs = sum(1 for k in ("ref1", "ref2") if files.get(k))
-        return {"prompt": prompts.edit_prompt(job.params, n_refs), "negative": " ", **files}
+        return {"prompt": prompts.edit_prompt(job.params, n_refs), "negative": " ", **files, **_megapixel_size(job)}
 
     def run(self, job: JobInput) -> list[Output]:
         outs = self.run_images(job)
@@ -197,7 +247,8 @@ class ComfyRender(ComfyEdit):
 
     def values(self, job: JobInput) -> dict[str, Any]:
         files = _upload_inputs(self.client, job, ["image"])
-        return {"prompt": prompts.render_prompt(job.params), "negative": " ", **files, "ref1": None, "ref2": None}
+        return {"prompt": prompts.render_prompt(job.params), "negative": " ", **files, "ref1": None, "ref2": None,
+                **_megapixel_size(job)}
 
 
 class ComfyNewView(ComfyEdit):
@@ -205,33 +256,34 @@ class ComfyNewView(ComfyEdit):
 
     def values(self, job: JobInput) -> dict[str, Any]:
         files = _upload_inputs(self.client, job, ["image"])
-        return {"prompt": prompts.new_view_prompt(job.params), "negative": " ", **files, "ref1": None, "ref2": None}
+        return {"prompt": prompts.new_view_prompt(job.params), "negative": " ", **files, "ref1": None, "ref2": None,
+                **_megapixel_size(job)}
 
 
 class ComfyAnimate(ComfyProvider):
     workflow, template_base, model = "animate", "animate", "Wan 2.2"
 
-    def template_name(self, job: JobInput) -> str:
+    def mode(self, job: JobInput) -> str:
         # Only the A14B graph supports an end frame.
-        if job.images.get("end") is not None:
-            return "animate_quality"
-        return f"animate_{job.params.get('mode', 'fast')}"
+        return "quality" if job.images.get("end") is not None else str(job.params.get("mode", "fast"))
 
     def values(self, job: JobInput) -> dict[str, Any]:
         files = _upload_inputs(self.client, job, ["image", "end"])
         start = job.images["image"]
-        quality = self.template_name(job) == "animate_quality"
-        fps = 16 if quality else 24
+        quality = self.mode(job) == "quality"
+        video = {"fps": 16, "long": 832, "short": 480} if quality else {"fps": 24, "long": 1280, "short": 704}
+        video.update(self.template_meta.get("video", {}))  # lighter profiles shrink this
+        fps = int(video["fps"])
+        seconds = min(float(job.params.get("duration", 5)), float(video.get("max_seconds", 10)))
         # Wan wants frame counts of 4n+1 and sizes divisible by 32.
-        frames = int(float(job.params.get("duration", 5)) * fps) // 4 * 4 + 1
-        long_side = 832 if quality else 1280
-        short_side = 480 if quality else 704
+        frames = int(seconds * fps) // 4 * 4 + 1
+        long_side, short_side = int(video["long"]), int(video["short"])
         w, h = (long_side, short_side) if start.width >= start.height else (short_side, long_side)
         return {"prompt": prompts.animate_prompt(job.params), "negative": prompts.VIDEO_NEGATIVE,
                 "width": w, "height": h, "length": frames, "fps": fps, **files}
 
     def run(self, job: JobInput) -> list[Output]:
-        template = load_template(self.template_name(job))
+        template = self.prepare(job)
         graph = fill_template(template, {**self.values(job), "seed": job.seed()})
         outs = []
         for f in self.client.run(graph, job.progress):

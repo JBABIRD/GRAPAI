@@ -10,7 +10,7 @@ TEMPLATES = Path(__file__).resolve().parent.parent / "comfy_workflows"
 
 
 def test_templates_are_valid_graphs():
-    for path in TEMPLATES.glob("*.json"):
+    for path in TEMPLATES.rglob("*.json"):
         graph = json.loads(path.read_text())
         assert "_meta" in graph
         nodes = {k: v for k, v in graph.items() if k != "_meta"}
@@ -78,3 +78,53 @@ def test_animate_picks_keyframe_graph(monkeypatch):
     assert (v["length"] - 1) % 4 == 0 and v["width"] % 32 == 0 and v["height"] % 32 == 0
     job2 = JobInput(images={"image": img}, params={"mode": "fast", "duration": 5})
     assert p.template_name(job2) == "animate_fast"
+
+
+def test_laptop_klein_prunes_reference_chains():
+    graph = json.loads((TEMPLATES / "laptop" / "edit_fast.json").read_text())
+    filled = comfy.fill_template(graph, {"image": "a.png", "prompt": "p", "seed": 1, "width": 1024, "height": 768,
+                                         "ref1": None, "ref2": None})
+    for gone in ("11", "12", "15", "16", "17", "18", "21", "22"):
+        assert gone not in filled
+    assert filled["35"]["inputs"]["conditioning"] == ["20", 0]  # bypassed straight to the first reference
+    with_ref = comfy.fill_template(graph, {"image": "a.png", "ref1": "b.png", "prompt": "p", "seed": 1,
+                                           "width": 1024, "height": 768, "ref2": None})
+    assert with_ref["35"]["inputs"]["conditioning"] == ["21", 0] and "16" in with_ref
+    for node in with_ref.values():
+        for v in node["inputs"].values():
+            if isinstance(v, list):
+                assert v[0] in with_ref
+
+
+def test_hybrid_routing(monkeypatch):
+    from ductus.config import settings
+
+    monkeypatch.setenv("DUCTUS_COMFY_URL", "http://cloud:8188")
+    monkeypatch.setenv("DUCTUS_COMFY_URL_FAST", "http://laptop:8188/")
+    monkeypatch.setenv("DUCTUS_COMFY_PROFILE_FAST", "laptop")
+    monkeypatch.setenv("DUCTUS_COMFY_URL_ANIMATE", "http://cloud:8188")
+    monkeypatch.setenv("DUCTUS_COMFY_PROFILE_ANIMATE", "")
+    monkeypatch.setattr(settings, "comfy_url", "http://cloud:8188")
+    assert settings.comfy_target("edit", "fast") == ("http://laptop:8188", "laptop")
+    assert settings.comfy_target("edit", "quality") == ("http://cloud:8188", "")
+    assert settings.comfy_target("animate", "fast")[0] == "http://cloud:8188"
+
+
+def test_laptop_profile_shrinks_video(monkeypatch):
+    from ductus.config import settings
+
+    monkeypatch.setattr(settings, "comfy_target", lambda w, m: ("http://x", "laptop"))
+
+    class FakeClient:
+        base_url = "http://x"
+
+        def upload_image(self, image, hint):
+            return f"{hint}.png"
+
+    p = comfy.ComfyAnimate()
+    p.client = FakeClient()
+    job = JobInput(images={"image": Image.new("RGB", (1600, 900))}, params={"mode": "fast", "duration": 5})
+    p.prepare(job)
+    v = p.values(job)
+    assert (v["width"], v["height"]) == (832, 480)
+    assert v["length"] == 73  # 3 s cap at 24 fps, 4n+1
