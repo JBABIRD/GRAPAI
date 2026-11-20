@@ -79,17 +79,24 @@ def outpaint_prompt(params: dict) -> str:
 
 
 STYLE_ASPECTS = {
-    "full": "its overall visual style: colour palette, materials and finishes, rendering technique, lighting and mood",
-    "colours_materials": "its colour palette, materials and surface finishes",
-    "rendering": "its rendering technique and medium (for example marker, clay, watercolour or photoreal), line and shading style",
-    "lighting_mood": "its lighting, time of day, atmosphere and colour grading",
+    "full": "same medium, line work, colours, materials, shading, lighting and background treatment as image 2",
+    "colours_materials": "same colour palette, materials and surface finishes as image 2",
+    "rendering": "same medium, line work, shading and rendering technique as image 2",
+    "lighting_mood": "same lighting, time of day, atmosphere and colour grading as image 2",
 }
 
 
 def style_prompt(params: dict) -> str:
-    aspect = STYLE_ASPECTS.get(str(params.get("transfer", "full")), STYLE_ASPECTS["full"])
-    text = (f"Restyle Picture 1 using the style of Picture 2: apply {aspect}. "
-            "Keep Picture 1's subject, exact shape, proportions, design details, composition and camera angle. "
-            "Do not copy any objects or content from Picture 2, only its style.")
-    extra = str(params.get("prompt", "")).strip()
-    return f"{text} {extra}" if extra else text
+    """Laptop tests: 'image 1 / image 2' wording transfers far more than 'Picture 1/2', and a described
+    style works best inside the instruction rather than appended."""
+    transfer = str(params.get("transfer", "full"))
+    aspect = STYLE_ASPECTS.get(transfer, STYLE_ASPECTS["full"])
+    verb = "Relight image 1" if transfer == "lighting_mood" else "Redraw image 1"
+    desc = str(params.get("prompt", "")).strip().rstrip(".")
+    text = f"{verb} in the exact visual style of image 2"
+    text += f": {desc}, {aspect}." if desc else f": {aspect}."
+    text += (" Keep image 1's object, exact shape, proportions, design details and composition."
+             " Do not copy any objects or content from image 2.")
+    if transfer == "lighting_mood":
+        text += " Do not add any vehicles, people or objects from image 2."
+    return text

@@ -149,7 +149,7 @@ WORKFLOWS: dict[str, Workflow] = {
             params=[
                 ParamSpec(name="transfer", kind="select", label="Take from the style", default="full",
                           options=["full", "colours_materials", "rendering", "lighting_mood"]),
-                ParamSpec(name="prompt", kind="text", label="Extra direction (optional)", default=""),
+                ParamSpec(name="prompt", kind="text", label="Describe the style (optional)", default=""),
                 _MODE, _count(2), _SEED,
             ],
             model="FLUX.2 klein 4B / Qwen-Image-Edit",
