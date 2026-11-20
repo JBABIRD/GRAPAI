@@ -102,23 +102,27 @@ def style_prompt(params: dict) -> str:
 
 
 VIEWS = {
-    "front": "straight front view, the camera faces the front of the object head-on at its centre height",
+    "front": ("straight front view: the camera is directly in front of the {what} at its centre height; only the "
+              "front face is visible, both sides are hidden, the view is symmetric"),
     "front_left_34": "three-quarter front view from the front-left, camera slightly above centre height",
     "left": "pure side view of the left side, camera perpendicular to the side, profile silhouette",
     "rear_left_34": "three-quarter rear view from the rear-left, camera slightly above centre height",
-    "rear": "straight rear view, the camera faces the back of the object head-on",
+    "rear": ("straight rear view: the camera is directly behind the {what}; its back end faces the camera and its "
+             "front end points straight away from the camera and is hidden behind it"),
     "rear_right_34": "three-quarter rear view from the rear-right, camera slightly above centre height",
     "right": "pure side view of the right side, camera perpendicular to the side, profile silhouette",
     "front_right_34": "three-quarter front view from the front-right, camera slightly above centre height",
-    "top": "top view from directly above, plan view looking straight down",
+    "top": ("top view: the camera is directly above the {what} looking straight down; only its upper surface is "
+            "visible, the sides are hidden, the outline is the plan silhouette"),
 }
 VIEW_LABELS = {
     "front": "Front", "front_left_34": "3/4 front left", "left": "Left side", "rear_left_34": "3/4 rear left",
     "rear": "Rear", "rear_right_34": "3/4 rear right", "right": "Right side", "front_right_34": "3/4 front right",
-    "top": "Top",
+    "top": "Top (approx.)",
 }
 VIEW_SETS = {
-    "design_6": ["front", "left", "rear", "top", "front_left_34", "rear_right_34"],
+    # Top is the weakest view with klein 4B, so the default design set leaves it out (Ortho 4 has it).
+    "design_5": ["front", "left", "rear", "front_left_34", "rear_right_34"],
     "ortho_4": ["front", "left", "rear", "top"],
     "turnaround_8": ["front", "front_right_34", "right", "rear_right_34", "rear", "rear_left_34", "left",
                      "front_left_34"],
@@ -127,7 +131,7 @@ VIEW_SETS = {
 
 def view_prompt(params: dict, view: str) -> str:
     what = str(params.get("prompt", "")).strip().rstrip(".") or "object"
-    text = (f"Show the exact same {what} from a new camera position: {VIEWS[view]}. "
+    text = (f"Show the exact same {what} from a new camera position: {VIEWS[view].format(what=what)}. "
             "Keep its design, shape, proportions, colours, materials and every detail identical, only the camera moves.")
     if str(params.get("scene", "same_scene")) == "studio":
         text += " Place it on a plain light grey studio backdrop with soft, even lighting."

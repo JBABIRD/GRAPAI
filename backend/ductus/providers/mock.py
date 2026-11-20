@@ -337,5 +337,5 @@ class MockViews(Provider):
     def run(self, job: JobInput) -> list[Output]:
         from .prompts import VIEW_LABELS, VIEW_SETS
         src = _fit(imaging.flatten(job.images["image"]))
-        views = VIEW_SETS.get(str(job.params.get("set", "design_6")), VIEW_SETS["design_6"])
+        views = VIEW_SETS.get(str(job.params.get("set", "design_5")), VIEW_SETS["design_5"])
         return [Output(image=_rotate_view(src, self.ANGLES[v]), meta={"view": VIEW_LABELS[v]}) for v in views]

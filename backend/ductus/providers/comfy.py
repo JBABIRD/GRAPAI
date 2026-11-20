@@ -287,7 +287,7 @@ class ComfyViews(ComfyEdit):
     def run(self, job: JobInput) -> list[Output]:
         template = self.prepare(job)
         files = _upload_inputs(self.client, job, ["image"])
-        views = prompts.VIEW_SETS.get(str(job.params.get("set", "design_6")), prompts.VIEW_SETS["design_6"])
+        views = prompts.VIEW_SETS.get(str(job.params.get("set", "design_5")), prompts.VIEW_SETS["design_5"])
         seed = job.seed()
         outs: list[Output] = []
         for i, view in enumerate(views):

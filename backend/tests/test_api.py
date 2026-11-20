@@ -145,7 +145,7 @@ def test_style_transfer_needs_both_images(client, sketch):
 
 def test_views_returns_labelled_set(client, sketch):
     aid = upload(client, sketch)
-    r = client.post("/api/jobs", json={"workflow": "views", "inputs": {"image": aid}, "params": {"set": "design_6"}})
+    r = client.post("/api/jobs", json={"workflow": "views", "inputs": {"image": aid}, "params": {"set": "design_5"}})
     job = wait(client, r.json()["id"])
     assert job["status"] == "done", job
-    assert [o["meta"]["view"] for o in job["outputs"]] == ["Front", "Left side", "Rear", "Top", "3/4 front left", "3/4 rear right"]
+    assert [o["meta"]["view"] for o in job["outputs"]] == ["Front", "Left side", "Rear", "3/4 front left", "3/4 rear right"]

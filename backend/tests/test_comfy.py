@@ -233,7 +233,7 @@ def test_views_one_run_per_view_same_seed():
     p.client = Srv()
     outs = p.run(JobInput(images={"image": Image.new("RGB", (800, 600), "white")},
                           params={"mode": "fast", "seed": 5, "set": "ortho_4", "scene": "studio"}))
-    assert [o.meta["view"] for o in outs] == ["Front", "Left side", "Rear", "Top"]
+    assert [o.meta["view"] for o in outs] == ["Front", "Left side", "Rear", "Top (approx.)"]
     texts = [json.dumps(g) for g in graphs]
     assert all('"noise_seed": 5' in t or '"seed": 5' in t for t in texts)
     assert "studio backdrop" in texts[0] and "top view" in texts[3]
