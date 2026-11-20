@@ -301,56 +301,71 @@ class ComfyAnimate(ComfyProvider):
         return outs
 
 
-class ComfyErase(ComfyEdit):
-    """Erase: crop around the mask, blur the object away, let the edit model rebuild the background,
-    then blend the crop back so nothing outside the (slightly grown) mask changes."""
+class ComfyInpaint(ComfyProvider):
+    """True inpainting: only the masked area is generated, guided by the untouched pixels around it."""
 
-    workflow, template_base, model = "erase", "edit", "Qwen-Image-Edit-2511"
+    backend, template_base = "comfy", "inpaint"
+    denoise = 1.0
+
+    def inpaint(self, job: JobInput, image: Image.Image, soft: Image.Image, prompt: str) -> list[Image.Image]:
+        """Fill the white part of `soft` (0-255, feathered) in `image`; returns results at image size."""
+        template = self.prepare(job)
+        size = _size_for(image.size, float(self.template_meta.get("megapixels", 1.0)))
+        work = image.resize((size["width"], size["height"]), Image.LANCZOS)
+        work_mask = soft.resize(work.size, Image.BILINEAR).convert("RGB")
+        img_name = self.client.upload_image(work, "image")
+        mask_name = self.client.upload_image(work_mask, "mask")
+        count, seed = int(job.params.get("count", 1) or 1), job.seed()
+        outs: list[Image.Image] = []
+        for i in range(count):
+            job.progress(i / count, f"generating {i + 1}/{count}")
+            graph = fill_template(template, {"prompt": prompt, "negative": prompts.NEGATIVE, "image": img_name,
+                                             "mask": mask_name, "seed": seed + i, "denoise": self.denoise})
+            for f in self.client.run(graph, lambda p, m="": job.progress((i + p) / count, m)):
+                if f["filename"].lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                    out = Image.open(io.BytesIO(self.client.fetch(f)))
+                    out.load()
+                    out = out.convert("RGB").resize(image.size, Image.LANCZOS)
+                    # Only the masked area changes; the rest stays pixel-exact.
+                    outs.append(Image.composite(out, image, soft))
+        return outs
+
+
+class ComfyErase(ComfyInpaint):
+    """Erase: crop around the mask with plenty of context and inpaint only the (grown) mask."""
+
+    workflow, model = "erase", "Z-Image-Turbo / Qwen-Image (inpaint)"
 
     def run(self, job: JobInput) -> list[Output]:
         src = imaging.flatten(job.images["image"])
-        hole = imaging.mask_from_image(job.images["mask"], src.size)
-        box = imaging.mask_box(hole)
+        hole = imaging.mask_from_image(job.images["mask"], src.size).point(lambda v: 255 if v > 127 else 0)
+        box = imaging.mask_box(hole, margin=1.0, min_side=512)
         if box is None:
             raise ValueError("The mask is empty: paint over the object to erase first")
-        grow = max(5, (max(box[2] - box[0], box[3] - box[1]) // 60) | 1)
-        hole = hole.point(lambda v: 255 if v > 127 else 0).filter(ImageFilter.MaxFilter(min(grow, 31)))
         crop, crop_hole = src.crop(box), hole.crop(box)
-        prefilled = imaging.fill_holes(crop, crop_hole)
-
-        def prepared() -> dict[str, Any]:
-            name = self.client.upload_image(prefilled, "image")
-            return {"prompt": prompts.erase_prompt(job.params), "negative": " ", "image": name,
-                    "ref1": None, "ref2": None, **_size_for(crop.size)}
-
-        outs = self.run_images(job, prepared=prepared)
-        soft = imaging.feather(crop_hole.filter(ImageFilter.MaxFilter(min(grow, 31))), 4)
-        for o in outs:
-            patch = Image.composite(o.image.convert("RGB").resize(crop.size, Image.LANCZOS), crop, soft)
+        grow = max(5, (min(crop.size) // 40) | 1)
+        crop_hole = crop_hole.filter(ImageFilter.MaxFilter(min(grow, 31)))  # take the object's edge and shadow too
+        soft = imaging.feather(crop_hole, grow / 2)
+        prefilled = Image.composite(imaging.fill_holes(crop, crop_hole), crop, crop_hole)
+        outs = []
+        for patch in self.inpaint(job, prefilled, soft, prompts.erase_prompt(job.params)):
             full = src.copy()
             full.paste(patch, box[:2])
-            o.image = full
+            outs.append(Output(image=full, meta={"seed": job.seed()}))
         return outs
 
 
-class ComfyOutpaint(ComfyEdit):
-    """Outpaint: put the image on the bigger canvas with a soft colour fill, let the edit model paint the
-    new area at ~1 MP, then put the original pixels back at full resolution."""
+class ComfyOutpaint(ComfyInpaint):
+    """Outpaint: inpaint the new border on the bigger canvas, overlapping the original a little so the
+    join is generated together with its surroundings."""
 
-    workflow, template_base, model = "outpaint", "edit", "Qwen-Image-Edit-2511"
+    workflow, model = "outpaint", "Z-Image-Turbo / Qwen-Image (inpaint)"
 
     def run(self, job: JobInput) -> list[Output]:
         src = imaging.flatten(job.images["image"])
-        pads = imaging.outpaint_pads(job.params, src.size)
-        canvas, hole = imaging.extend_canvas(src, *pads)
-
-        def prepared() -> dict[str, Any]:
-            name = self.client.upload_image(canvas, "image")
-            return {"prompt": prompts.outpaint_prompt(job.params), "negative": " ", "image": name,
-                    "ref1": None, "ref2": None, **_size_for(canvas.size)}
-
-        outs = self.run_images(job, prepared=prepared)
-        for o in outs:
-            o.image = imaging.blend_outpaint(canvas, o.image, hole)
-        return outs
-
+        canvas, hole = imaging.extend_canvas(src, *imaging.outpaint_pads(job.params, src.size))
+        overlap = max(8, (min(src.size) // 32) | 1)
+        grown = hole.filter(ImageFilter.MaxFilter(min(overlap, 31)))
+        soft = imaging.feather(grown, overlap / 2)
+        outs = self.inpaint(job, canvas, soft, prompts.outpaint_prompt(job.params))
+        return [Output(image=o, meta={"seed": job.seed()}) for o in outs]

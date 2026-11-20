@@ -60,18 +60,15 @@ def animate_prompt(params: dict) -> str:
 
 def erase_prompt(params: dict) -> str:
     fill = str(params.get("prompt", "")).strip()
-    base = ("Remove the object in the blurred area completely and fill the area seamlessly with what is "
-            "behind it, matching the surrounding background, surfaces, lighting, texture and perspective.")
     if fill:
-        base += f" Fill it with: {fill}."
-    return base + " Keep everything else exactly unchanged."
+        return f"{fill}, seamlessly matching the surrounding scene, same lighting, perspective and texture, photorealistic"
+    return ("empty background only, seamless continuation of the surrounding surfaces, floor and backdrop, "
+            "same lighting, perspective and texture, nothing in this area, no objects, photorealistic")
 
 
 def outpaint_prompt(params: dict) -> str:
     extra = str(params.get("prompt", "")).strip()
-    base = ("Extend this image outward to fill the whole frame. The blurred border areas are new space: "
-            "continue the background, floor, lighting, reflections and scene naturally beyond the original edges, "
-            "sharp and photographic.")
-    if extra:
-        base += f" Around it: {extra}."
-    return base + " Keep the original image content exactly unchanged."
+    base = ("wide view of the same scene, the background, ground, sky and lighting continue naturally to the "
+            "edges of the frame, consistent perspective and reflections, sharp photographic detail, "
+            "no additional vehicles, products or people, no added text, no borders, no frames")
+    return f"{extra}, {base}" if extra else base

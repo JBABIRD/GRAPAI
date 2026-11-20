@@ -182,8 +182,9 @@ def test_erase_crops_around_mask_and_keeps_the_rest():
     mask.paste(255, (700, 500, 800, 600))
     outs = p.run(JobInput(images={"image": src, "mask": mask}, params={"mode": "fast", "count": 1, "seed": 1}))
     sent = srv.uploads["image"]
-    assert sent.size[0] < src.size[0] and sent.size[1] < src.size[1]  # only the area around the mask
-    assert "Remove the object" in srv.graph["20"]["inputs"]["prompt"]
+    assert abs(sent.size[0] / sent.size[1] - 1.0) < 0.05  # a square crop around the mask, not the 4:3 frame
+    assert "empty background" in srv.graph["5"]["inputs"]["text"]
+    assert srv.graph["8"]["inputs"]["denoise"] == 1.0 and "mask" in srv.uploads
     out = outs[0].image
     assert out.size == src.size
     assert out.getpixel((750, 550))[2] > 200 and out.getpixel((750, 550))[0] < 60  # filled by the model
@@ -199,6 +200,7 @@ def test_outpaint_keeps_original_and_fills_new_area():
                           params={"mode": "fast", "count": 1, "seed": 1, "left": 200, "right": 0, "top": 0, "bottom": 100}))
     out = outs[0].image
     assert out.size == (1000, 700)
-    assert srv.uploads["image"].size == (1000, 700)
+    up = srv.uploads["image"].size
+    assert abs(up[0] / up[1] - 1000 / 700) < 0.03 and up[0] % 16 == 0 and up[1] % 16 == 0
     assert out.getpixel((20, 300))[2] > 200          # new area from the model
     assert out.getpixel((600, 300)) == (255, 255, 255)  # original pixels back
