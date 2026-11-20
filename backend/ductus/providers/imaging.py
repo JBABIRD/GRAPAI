@@ -109,3 +109,17 @@ def mask_from_image(mask: Image.Image, size: tuple[int, int]) -> Image.Image:
     else:
         m = mask.convert("L")
     return m.resize(size, Image.LANCZOS)
+
+
+def pad_to_aspect(image: Image.Image, aspect: float) -> Image.Image:
+    """Letterbox an RGB image to width/height = aspect, filling with its border colour."""
+    w, h = image.size
+    if abs(w / h - aspect) < 0.01:
+        return image
+    rgb = np.asarray(image.convert("RGB"), dtype=np.float32)
+    border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
+    fill = tuple(int(c) for c in np.median(border, axis=0))
+    nw, nh = (round(h * aspect), h) if w / h < aspect else (w, round(w / aspect))
+    canvas = Image.new("RGB", (nw, nh), fill)
+    canvas.paste(image.convert("RGB"), ((nw - w) // 2, (nh - h) // 2))
+    return canvas

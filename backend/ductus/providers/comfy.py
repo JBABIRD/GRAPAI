@@ -268,7 +268,6 @@ class ComfyAnimate(ComfyProvider):
         return "quality" if job.images.get("end") is not None else str(job.params.get("mode", "fast"))
 
     def values(self, job: JobInput) -> dict[str, Any]:
-        files = _upload_inputs(self.client, job, ["image", "end"])
         start = job.images["image"]
         quality = self.mode(job) == "quality"
         video = {"fps": 16, "long": 832, "short": 480} if quality else {"fps": 24, "long": 1280, "short": 704}
@@ -279,6 +278,10 @@ class ComfyAnimate(ComfyProvider):
         frames = int(seconds * fps) // 4 * 4 + 1
         long_side, short_side = int(video["long"]), int(video["short"])
         w, h = (long_side, short_side) if start.width >= start.height else (short_side, long_side)
+        # Wan crops the frame to the video's aspect; pad instead so the whole product stays in shot.
+        framed = {k: imaging.pad_to_aspect(imaging.flatten(img), w / h)
+                  for k, img in job.images.items() if k in ("image", "end") and img is not None}
+        files = {n: (self.client.upload_image(framed[n], n) if n in framed else None) for n in ("image", "end")}
         return {"prompt": prompts.animate_prompt(job.params), "negative": prompts.VIDEO_NEGATIVE,
                 "width": w, "height": h, "length": frames, "fps": fps, **files}
 

@@ -128,3 +128,26 @@ def test_laptop_profile_shrinks_video(monkeypatch):
     v = p.values(job)
     assert (v["width"], v["height"]) == (832, 480)
     assert v["length"] == 73  # 3 s cap at 24 fps, 4n+1
+
+
+def test_animate_pads_square_frames_instead_of_cropping(monkeypatch):
+    from ductus.config import settings
+
+    monkeypatch.setattr(settings, "comfy_target", lambda w, m: ("http://x", "laptop"))
+    uploaded = {}
+
+    class FakeClient:
+        base_url = "http://x"
+
+        def upload_image(self, image, hint):
+            uploaded[hint] = image
+            return f"{hint}.png"
+
+    p = comfy.ComfyAnimate()
+    p.client = FakeClient()
+    job = JobInput(images={"image": Image.new("RGB", (1024, 1024), "white")}, params={"mode": "fast", "duration": 3})
+    p.prepare(job)
+    v = p.values(job)
+    img = uploaded["image"]
+    assert abs(img.width / img.height - v["width"] / v["height"]) < 0.01
+    assert img.height == 1024  # nothing cropped, sides padded

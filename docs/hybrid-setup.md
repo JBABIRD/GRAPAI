@@ -6,12 +6,12 @@ Fast mode runs on your own laptop for free, and quality mode plus video go to a 
 |---|---|---|
 | Create | Z-Image-Turbo GGUF Q5 | Qwen-Image-2512 |
 | Render sketch, Edit, New view | FLUX.2 klein 4B fp8 (up to 2 references) | Qwen-Image-Edit-2511 |
-| Animate | Wan 2.2 5B GGUF Q4, 832×480, up to 3 s (slow: expect 10 to 20 min) | Wan 2.2 14B, start and end frame |
+| Animate | Wan 2.2 5B GGUF Q4, 832×480, up to 3 s (about 3 min per clip on an RTX 4070 Laptop) | Wan 2.2 14B, start and end frame |
 | Cut out, Upscale | inside the Ductus API (CPU or GPU) | the same |
 
-By default Animate is sent to the cloud GPU even in fast mode, because a laptop takes a long time. You can change that (see step 3).
+Measured on an RTX 4070 Laptop (8 GB): Create about 22 s per 1024² image (42 s on the first run), Animate about 3 min for a 3 s 832×480 clip. The example in step 3 sends Animate to the cloud GPU for higher resolution and longer clips; remove those lines to keep video local.
 
-> These graphs have not been benchmarked on an 8 GB card yet. Times are estimates. If a node or file name differs in your ComfyUI version, see [comfyui.md](comfyui.md) for how to swap in an exported workflow.
+> Downloads from Hugging Face can be corrupted when a connection drops and resumes. If a tool returns pure noise, check the files' SHA-256 against the model page. If a node or file name differs in your ComfyUI version, see [comfyui.md](comfyui.md) for how to swap in an exported workflow.
 
 ## 1. Laptop (Windows 11, RTX 4070 8 GB)
 
