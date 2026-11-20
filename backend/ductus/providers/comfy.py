@@ -404,9 +404,6 @@ class ComfyOutpaint(ComfyInpaint):
         # Wide, soft join (96 px overlap, 48 px blur at working size): a narrow one left a visible box
         # where the new sky's blue differed slightly from the original's.
         outs = self.inpaint(job, canvas, hole, prompts.outpaint_prompt(job.params), grow=2 * 96 + 1, blur=48)
-        scale = canvas.width / work_w
-        original_area = ImageOps.invert(hole)
-        outs = [imaging.match_seam_tone(o, original_area, band=int(40 * scale), gap=int(140 * scale)) for o in outs]
         # Reference = the padded canvas. Tested: the unpadded original as reference duplicated the
         # subject or left a sky rectangle; the scene description is what fixes weak fills.
         return [Output(image=o, meta={"seed": job.seed()}) for o in outs]
