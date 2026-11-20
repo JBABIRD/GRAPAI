@@ -1,3 +1,4 @@
+import pytest
 import json
 from pathlib import Path
 
@@ -204,4 +205,6 @@ def test_outpaint_keeps_original_and_fills_new_area():
     up = srv.uploads["image"].size
     assert abs(up[0] / up[1] - 1000 / 700) < 0.03 and up[0] % 16 == 0 and up[1] % 16 == 0
     assert out.getpixel((20, 300))[2] > 200          # new area from the model
+    assert srv.uploads["reference"].size[0] / srv.uploads["reference"].size[1] == pytest.approx(800 / 600, abs=0.03)
+    assert srv.graph["12"]["inputs"]["image"] == "reference.png"  # reference = original, not the padded canvas
     assert out.getpixel((600, 300)) == (255, 255, 255)  # original pixels back

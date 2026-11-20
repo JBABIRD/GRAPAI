@@ -309,7 +309,7 @@ class ComfyInpaint(ComfyProvider):
     backend, template_base = "comfy", "inpaint"
 
     def inpaint(self, job: JobInput, image: Image.Image, hole: Image.Image, prompt: str,
-                grow: int, blur: float) -> list[Image.Image]:
+                grow: int, blur: float, reference: Image.Image | None = None) -> list[Image.Image]:
         """Fill the white part of `hole` (full-res, binary) in `image`. `grow`/`blur` are in pixels at
         the model's working size (~1 MP), so they behave the same for any input size."""
         template = self.prepare(job)
@@ -322,12 +322,17 @@ class ComfyInpaint(ComfyProvider):
         # LoadImageMask reads the red channel: the mask must go up as RGB, not L.
         img_name = self.client.upload_image(work, "image")
         mask_name = self.client.upload_image(soft.convert("RGB"), "mask")
+        if reference is None:
+            ref_name = img_name
+        else:
+            rs = _size_for(reference.size, float(self.template_meta.get("megapixels", 1.0)))
+            ref_name = self.client.upload_image(reference.resize((rs["width"], rs["height"]), Image.LANCZOS), "reference")
         full_soft = soft.resize(image.size, Image.BILINEAR)
         count, seed = int(job.params.get("count", 1) or 1), job.seed()
         outs: list[Image.Image] = []
         for i in range(count):
             job.progress(i / count, f"generating {i + 1}/{count}")
-            graph = fill_template(template, {"prompt": prompt, "image": img_name, "mask": mask_name,
+            graph = fill_template(template, {"prompt": prompt, "image": img_name, "mask": mask_name, "reference": ref_name,
                                              "seed": seed + i, **size})
             for f in self.client.run(graph, lambda p, m="": job.progress((i + p) / count, m)):
                 if f["filename"].lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
@@ -372,5 +377,6 @@ class ComfyOutpaint(ComfyInpaint):
         canvas = Image.fromarray(arr)
         hole = Image.new("L", canvas.size, 255)
         hole.paste(0, (left, top, left + src.width, top + src.height))
-        outs = self.inpaint(job, canvas, hole, prompts.outpaint_prompt(job.params), grow=2 * 24 + 1, blur=10)
+        outs = self.inpaint(job, canvas, hole, prompts.outpaint_prompt(job.params), grow=2 * 24 + 1, blur=10,
+                            reference=src)
         return [Output(image=o, meta={"seed": job.seed()}) for o in outs]

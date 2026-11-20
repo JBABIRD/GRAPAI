@@ -7,11 +7,12 @@
       "text_encoders": "qwen_3_4b.safetensors",
       "vae": "flux2-vae.safetensors"
     },
-    "note": "True inpainting with the image as reference: VAEEncode -> SetLatentNoiseMask, DifferentialDiffusion for a soft edge, ReferenceLatent keeps the scene consistent, ImageCompositeMasked keeps unmasked pixels exact. The mask must be an RGB PNG (LoadImageMask reads the red channel).",
+    "note": "True inpainting with the image as reference: VAEEncode -> SetLatentNoiseMask, DifferentialDiffusion for a soft edge, ReferenceLatent keeps the scene consistent, ImageCompositeMasked keeps unmasked pixels exact. The mask must be an RGB PNG (LoadImageMask reads the red channel). The reference is the original image only (for outpaint, without the stretched border), so the model does not copy the padding.",
     "megapixels": 1.0,
     "placeholders": [
       "image",
       "mask",
+      "reference",
       "prompt",
       "width",
       "height",
@@ -105,7 +106,7 @@
         0
       ],
       "latent": [
-        "14",
+        "13",
         0
       ]
     }
@@ -209,6 +210,25 @@
         0
       ],
       "filename_prefix": "ductus/inpaint"
+    }
+  },
+  "12": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{reference}}"
+    }
+  },
+  "13": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "12",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
     }
   }
 }
