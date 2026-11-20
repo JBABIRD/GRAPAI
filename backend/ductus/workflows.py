@@ -138,6 +138,24 @@ WORKFLOWS: dict[str, Workflow] = {
             license="Apache-2.0",
         ),
         Workflow(
+            id="style",
+            name="Style transfer",
+            description="Restyle an image with the look of a reference: connect the image to Image and the look to Style.",
+            output="image",
+            inputs=[
+                InputSpec(name="image", kind="image", label="Image"),
+                InputSpec(name="style", kind="image", label="Style"),
+            ],
+            params=[
+                ParamSpec(name="transfer", kind="select", label="Take from the style", default="full",
+                          options=["full", "colours_materials", "rendering", "lighting_mood"]),
+                ParamSpec(name="prompt", kind="text", label="Extra direction (optional)", default=""),
+                _MODE, _count(2), _SEED,
+            ],
+            model="FLUX.2 klein 4B / Qwen-Image-Edit",
+            license="Apache-2.0",
+        ),
+        Workflow(
             id="erase",
             name="Erase object",
             description="Paint a mask over anything (Draw → Mask) and it is removed and filled with background.",

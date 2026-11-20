@@ -75,3 +75,20 @@ def outpaint_prompt(params: dict) -> str:
     if extra:
         base += f" Around it: {extra}."
     return base + " Do not add any vehicles, people, buildings, text or other new objects."
+
+
+STYLE_ASPECTS = {
+    "full": "its overall visual style: colour palette, materials and finishes, rendering technique, lighting and mood",
+    "colours_materials": "its colour palette, materials and surface finishes",
+    "rendering": "its rendering technique and medium (for example marker, clay, watercolour or photoreal), line and shading style",
+    "lighting_mood": "its lighting, time of day, atmosphere and colour grading",
+}
+
+
+def style_prompt(params: dict) -> str:
+    aspect = STYLE_ASPECTS.get(str(params.get("transfer", "full")), STYLE_ASPECTS["full"])
+    text = (f"Restyle Picture 1 using the style of Picture 2: apply {aspect}. "
+            "Keep Picture 1's subject, exact shape, proportions, design details, composition and camera angle. "
+            "Do not copy any objects or content from Picture 2, only its style.")
+    extra = str(params.get("prompt", "")).strip()
+    return f"{text} {extra}" if extra else text

@@ -207,3 +207,15 @@ def test_outpaint_keeps_original_and_fills_new_area():
     assert out.getpixel((20, 300))[2] > 200          # new area from the model
     assert srv.graph["12"]["inputs"]["image"] == "image.png"  # reference = the padded canvas (tested best)
     assert out.getpixel((600, 300)) == (255, 255, 255)  # original pixels back
+
+
+def test_style_sends_image_and_reference():
+    srv = _BlueServer()
+    p = comfy.ComfyStyle()
+    p.client = srv
+    img = Image.new("RGB", (800, 600), "white")
+    p.run(JobInput(images={"image": img, "style": Image.new("RGB", (300, 300), "red")},
+                   params={"mode": "fast", "count": 1, "seed": 1, "transfer": "rendering"}))
+    assert set(srv.uploads) == {"image", "style"}
+    text = json.dumps(srv.graph)
+    assert "Restyle Picture 1" in text and "rendering technique" in text

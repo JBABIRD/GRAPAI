@@ -47,6 +47,12 @@ function ImageNode({ id, data, selected }: NodeProps<ImageNodeT>) {
         </button>
         <button onClick={() => quickAction(id, "new_view")}>New view</button>
         <button onClick={() => quickAction(id, "animate")}>Animate</button>
+        <button
+          onClick={() => quickAction(id, "style")}
+          title="Style transfer: also select a style image (Shift-click) to use it, or connect one to the Style input"
+        >
+          Style
+        </button>
         <button onClick={() => compareWith(id)} title="Before/after slider against the image this came from">
           Compare
         </button>

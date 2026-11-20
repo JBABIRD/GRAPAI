@@ -12,6 +12,10 @@ const PROMPT_CHIPS: Record<string, string[]> = {
 };
 
 const LABELS: Record<string, string> = {
+  full: "Full look",
+  colours_materials: "Colours & materials",
+  rendering: "Rendering technique",
+  lighting_mood: "Lighting & mood",
   color_block: "Colour block",
   shaded: "Shaded",
   realistic: "Realistic",

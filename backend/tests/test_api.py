@@ -129,3 +129,15 @@ def test_outline_mask_selects_inside():
     open_stroke = Image.new("L", (200, 200), 0)
     ImageDraw.Draw(open_stroke).line((20, 100, 180, 100), fill=255, width=6)
     assert imaging.fill_enclosed(open_stroke).getpixel((100, 60)) == 0
+
+
+def test_style_transfer_needs_both_images(client, sketch):
+    aid = upload(client, sketch)
+    ref = Image.new("RGB", (128, 128), (200, 60, 20))
+    rid = upload(client, ref)
+    r = client.post("/api/jobs", json={"workflow": "style", "inputs": {"image": aid}, "params": {}})
+    assert r.status_code in (400, 422)
+    r = client.post("/api/jobs", json={"workflow": "style", "inputs": {"image": aid, "style": rid}, "params": {"count": 2}})
+    job = wait(client, r.json()["id"])
+    assert job["status"] == "done", job
+    assert len(job["outputs"]) == 2

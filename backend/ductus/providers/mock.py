@@ -309,3 +309,21 @@ class MockOutpaint(Provider):
         src = imaging.flatten(job.images["image"])
         canvas, _ = imaging.extend_canvas(src, *imaging.outpaint_pads(job.params, src.size))
         return [Output(image=canvas, meta={"seed": job.seed()})]
+
+
+class MockStyle(Provider):
+    """Preview stand-in: colour statistics transfer (Reinhard), no AI."""
+
+    workflow, backend, model = "style", "mock", "procedural"
+
+    def run(self, job: JobInput) -> list[Output]:
+        src = np.asarray(imaging.flatten(job.images["image"]), dtype=np.float32)
+        ref = np.asarray(imaging.flatten(job.images["style"]).resize((256, 256)), dtype=np.float32)
+        s_mean, s_std = src.reshape(-1, 3).mean(0), src.reshape(-1, 3).std(0) + 1e-3
+        r_mean, r_std = ref.reshape(-1, 3).mean(0), ref.reshape(-1, 3).std(0) + 1e-3
+        outs = []
+        for i in range(int(job.params.get("count", 2))):
+            k = 0.85 + 0.15 * i
+            arr = (src - s_mean) / s_std * (r_std * k + s_std * (1 - k)) + (r_mean * k + s_mean * (1 - k))
+            outs.append(Output(image=imaging.to_pil(arr), meta={"seed": job.seed() + i}))
+        return outs

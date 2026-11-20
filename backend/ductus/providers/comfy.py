@@ -265,6 +265,20 @@ class ComfyNewView(ComfyEdit):
                 **_megapixel_size(job)}
 
 
+class ComfyStyle(ComfyEdit):
+    """Style transfer: the edit model with the image as Picture 1 and the style reference as Picture 2."""
+
+    workflow, template_base, model = "style", "edit", "FLUX.2 klein 4B / Qwen-Image-Edit-2511"
+
+    def values(self, job: JobInput) -> dict[str, Any]:
+        files = _upload_inputs(self.client, job, ["image", "style"])
+        return {"prompt": prompts.style_prompt(job.params), "negative": " ", "image": files["image"],
+                "ref1": files["style"], "ref2": None, **_megapixel_size(job)}
+
+    def run(self, job: JobInput) -> list[Output]:
+        return self.run_images(job)
+
+
 class ComfyAnimate(ComfyProvider):
     workflow, template_base, model = "animate", "animate", "Wan 2.2"
 

@@ -59,7 +59,7 @@ const IMAGE_INPUT_NODES = new Set(["image"]);
 
 // Compare is a board tool, not an AI workflow; it shares the picker's list format.
 /** Tools whose text field is optional: run straight away from the image toolbar. */
-const AUTO_RUN = new Set(["erase"]);
+const AUTO_RUN = new Set(["erase", "style"]);
 
 const COMPARE_ENTRY = {
   id: "compare",
@@ -332,12 +332,16 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
       const node = ns.find((n) => n.id === nodeId);
       if (!node) return;
       // Edit takes extra selected images as references (@2, @3); other tools use just this one.
+      // Edit takes extra selected images as references (@2, @3); Style takes one as the style.
       const selected =
-        workflow === "edit" ? ns.filter((n) => n.selected && n.type === "image" && n.id !== nodeId).map((n) => n.id) : [];
+        workflow === "edit" || workflow === "style"
+          ? ns.filter((n) => n.selected && n.type === "image" && n.id !== nodeId).map((n) => n.id)
+          : [];
       const size = nodeSize(node);
       const toolId = addTool(workflow, { x: node.position.x + size.w + 90, y: node.position.y }, [nodeId, ...selected]);
       const wf = workflows.get(workflow);
-      if (toolId && wf && (AUTO_RUN.has(workflow) || wf.params.every((p) => p.kind !== "text"))) {
+      const ready = workflow !== "style" || selected.length > 0;
+      if (toolId && wf && ready && (AUTO_RUN.has(workflow) || wf.params.every((p) => p.kind !== "text"))) {
         window.setTimeout(() => runTool(toolId), 80);
       }
     },
