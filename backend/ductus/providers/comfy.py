@@ -397,10 +397,15 @@ class ComfyOutpaint(ComfyInpaint):
         # streaks; the original goes back unblurred. Tested on the laptop: no streaks or sky blocks.
         mp = float(load_template(self.template_name(job), self.target(job)[1]).get("_meta", {}).get("megapixels", 1.0))
         work_w = _size_for(canvas.size, mp)["width"]
-        canvas = canvas.filter(ImageFilter.GaussianBlur(60 * canvas.width / work_w))
-        canvas.paste(src, (left, top))
+        scale = canvas.width / work_w
+        sharp = canvas
+        blurred = canvas.filter(ImageFilter.GaussianBlur(60 * scale))
         hole = Image.new("L", canvas.size, 255)
         hole.paste(0, (left, top, left + src.width, top + src.height))
+        # Fade the sharp original into the blurred border (erode 48 px, blur 32 px at working size).
+        # A hard paste puts a rectangle into the start image and reference, and klein reproduced it.
+        alpha = ImageOps.invert(imaging.dilate(hole, int(48 * scale))).filter(ImageFilter.GaussianBlur(32 * scale))
+        canvas = Image.composite(sharp, blurred, alpha)
         # Wide, soft join (96 px overlap, 48 px blur at working size): a narrow one left a visible box
         # where the new sky's blue differed slightly from the original's.
         outs = self.inpaint(job, canvas, hole, prompts.outpaint_prompt(job.params), grow=2 * 96 + 1, blur=48)

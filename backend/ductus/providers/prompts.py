@@ -75,7 +75,8 @@ def outpaint_prompt(params: dict) -> str:
             "ground, background, sky, lighting, reflections and perspective.")
     if extra:
         base += f" Around it: {extra}."
-    return base + " Do not add any vehicles, people, buildings, text or other new objects."
+    return base + (" Do not add any vehicles, people, buildings, text or other new objects."
+                   " Do not repeat or duplicate the main subject.")
 
 
 STYLE_ASPECTS = {
