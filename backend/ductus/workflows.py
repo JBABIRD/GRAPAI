@@ -140,7 +140,8 @@ WORKFLOWS: dict[str, Workflow] = {
         Workflow(
             id="style",
             name="Style transfer",
-            description="Restyle an image with the look of a reference: connect the image to Image and the look to Style.",
+            description="Restyle an image with the look of a reference. A few words about the style or light "
+                        "(e.g. marker sketch, cold winter daylight) make it much more reliable.",
             output="image",
             inputs=[
                 InputSpec(name="image", kind="image", label="Image"),
@@ -149,7 +150,7 @@ WORKFLOWS: dict[str, Workflow] = {
             params=[
                 ParamSpec(name="transfer", kind="select", label="Take from the style", default="full",
                           options=["full", "colours_materials", "rendering", "lighting_mood"]),
-                ParamSpec(name="prompt", kind="text", label="Describe the style (optional)", default=""),
+                ParamSpec(name="prompt", kind="text", label="Describe the style or light (recommended)", default=""),
                 _MODE, _count(2), _SEED,
             ],
             model="FLUX.2 klein 4B / Qwen-Image-Edit",

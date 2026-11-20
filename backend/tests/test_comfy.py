@@ -218,4 +218,4 @@ def test_style_sends_image_and_reference():
                    params={"mode": "fast", "count": 1, "seed": 1, "transfer": "rendering"}))
     assert set(srv.uploads) == {"image", "style"}
     text = json.dumps(srv.graph)
-    assert "Redraw image 1 in the exact visual style of image 2" in text and "rendering technique" in text
+    assert "rendering technique of image 2" in text and "only a rendering reference" in text

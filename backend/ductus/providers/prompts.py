@@ -80,24 +80,22 @@ def outpaint_prompt(params: dict) -> str:
 
 
 STYLE_ASPECTS = {
-    "full": "same medium, line work, colours, materials, shading, lighting and background treatment as image 2",
-    "colours_materials": "same colour palette, materials and surface finishes as image 2",
-    "rendering": "same medium, line work, shading and rendering technique as image 2",
-    "lighting_mood": "same lighting, time of day, atmosphere and colour grading as image 2",
+    "full": ("Re-render image 1 with the look of image 2", "medium, line work, colours, materials, shading and lighting", "style"),
+    "colours_materials": ("Re-render image 1 with the colours and materials of image 2", "colour palette, materials and surface finishes", "colour and material"),
+    "rendering": ("Re-render image 1 with the rendering technique of image 2", "medium, line work, shading and rendering technique", "rendering"),
+    "lighting_mood": ("Relight image 1 with the lighting and colour palette of image 2", "lighting, time of day, atmosphere and colour grading", "colour and light"),
 }
 
 
 def style_prompt(params: dict) -> str:
-    """Laptop tests: 'image 1 / image 2' wording transfers far more than 'Picture 1/2', and a described
-    style works best inside the instruction rather than appended."""
+    """Laptop tests (car x sketch / ice photo): 'Redraw' turned photo references into illustrations;
+    'Re-render ... with the look of image 2' plus an explicit 'image 2 is only a reference' sentence keeps
+    image 2's objects and landscape out, and a described style or light makes the transfer reliable."""
     transfer = str(params.get("transfer", "full"))
-    aspect = STYLE_ASPECTS.get(transfer, STYLE_ASPECTS["full"])
-    verb = "Relight image 1" if transfer == "lighting_mood" else "Redraw image 1"
+    lead, aspect, kind = STYLE_ASPECTS.get(transfer, STYLE_ASPECTS["full"])
     desc = str(params.get("prompt", "")).strip().rstrip(".")
-    text = f"{verb} in the exact visual style of image 2"
-    text += f": {desc}, {aspect}." if desc else f": {aspect}."
-    text += (" Keep image 1's object, exact shape, proportions, design details and composition."
-             " Do not copy any objects or content from image 2.")
-    if transfer == "lighting_mood":
-        text += " Do not add any vehicles, people or objects from image 2."
+    text = f"{lead}: {desc}, matching its {aspect}." if desc else f"{lead}: match its {aspect}."
+    text += (f" Image 2 is only a {kind} reference: none of its objects, vehicles, ground or landscape may appear."
+             " Keep image 1's object, exact shape, proportions, design details, its background content and"
+             " composition unchanged.")
     return text
