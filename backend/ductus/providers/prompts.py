@@ -106,10 +106,12 @@ VIEWS = {
               "front face is visible, both sides are hidden, the view is symmetric"),
     "front_left_34": "three-quarter front view from the front-left, camera slightly above centre height",
     "left": "pure side view of the left side, camera perpendicular to the side, profile silhouette",
-    "rear_left_34": "three-quarter rear view from the rear-left, camera slightly above centre height",
-    "rear": ("straight rear view: the camera is directly behind the {what}; its back end faces the camera and its "
-             "front end points straight away from the camera and is hidden behind it"),
-    "rear_right_34": "three-quarter rear view from the rear-right, camera slightly above centre height",
+    "rear_left_34": ("three-quarter rear view from the rear-left: we see the back end and the left side of the {what}, "
+                     "the front end faces away and is hidden"),
+    "rear": ("straight rear view: the camera is directly behind the {what}; its front end, which faces away from "
+             "the camera, is completely hidden; we see only the back end"),
+    "rear_right_34": ("three-quarter rear view from the rear-right: we see the back end and the right side of the "
+                      "{what}, the front end faces away and is hidden"),
     "right": "pure side view of the right side, camera perpendicular to the side, profile silhouette",
     "front_right_34": "three-quarter front view from the front-right, camera slightly above centre height",
     "top": ("top view: the camera is directly above the {what} looking straight down; only its upper surface is "
