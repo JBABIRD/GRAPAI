@@ -46,6 +46,9 @@ function ImageNode({ id, data, selected }: NodeProps<ImageNodeT>) {
           Edit
         </button>
         <button onClick={() => quickAction(id, "new_view")}>New view</button>
+        <button onClick={() => quickAction(id, "views")} title="Standard views: front, side, rear, top and 3/4 in one go">
+          Views
+        </button>
         <button onClick={() => quickAction(id, "animate")}>Animate</button>
         <button
           onClick={() => quickAction(id, "style")}

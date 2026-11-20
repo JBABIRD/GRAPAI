@@ -25,6 +25,7 @@ export const WORKFLOW_ICONS: Record<string, string> = {
   remove_bg: "◌",
   erase: "⌫",
   style: "✺",
+  views: "⊞",
   outpaint: "⤢",
   upscale: "⤢",
   compare: "◧",

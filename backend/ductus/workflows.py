@@ -190,6 +190,24 @@ WORKFLOWS: dict[str, Workflow] = {
             license="Apache-2.0",
         ),
         Workflow(
+            id="views",
+            name="Standard views",
+            description="A consistent set of standard views (front, side, rear, top, 3/4) of the same object, "
+                        "in the same scene or on a studio backdrop.",
+            output="image",
+            inputs=[InputSpec(name="image", kind="image", label="Image")],
+            params=[
+                ParamSpec(name="set", kind="select", label="Views", default="design_6",
+                          options=["design_6", "ortho_4", "turnaround_8"]),
+                ParamSpec(name="scene", kind="select", label="Background", default="same_scene",
+                          options=["same_scene", "studio"]),
+                ParamSpec(name="prompt", kind="text", label="What is it? (optional, helps hidden sides)", default=""),
+                _MODE, _SEED,
+            ],
+            model="FLUX.2 klein 4B / Qwen-Image-Edit",
+            license="Apache-2.0",
+        ),
+        Workflow(
             id="animate",
             name="Animate",
             description="Make a short video from a start frame, optionally ending on a second frame.",

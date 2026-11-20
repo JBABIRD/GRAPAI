@@ -12,6 +12,11 @@ const PROMPT_CHIPS: Record<string, string[]> = {
 };
 
 const LABELS: Record<string, string> = {
+  design_6: "6 views",
+  ortho_4: "Ortho 4",
+  turnaround_8: "8 around",
+  same_scene: "Same scene",
+  studio: "Studio",
   full: "Full look",
   colours_materials: "Colours & materials",
   rendering: "Rendering technique",

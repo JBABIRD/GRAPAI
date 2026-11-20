@@ -279,6 +279,30 @@ class ComfyStyle(ComfyEdit):
         return self.run_images(job)
 
 
+class ComfyViews(ComfyEdit):
+    """Standard views: one edit run per view, same seed for every view so the set stays consistent."""
+
+    workflow, template_base, model = "views", "edit", "FLUX.2 klein 4B / Qwen-Image-Edit-2511"
+
+    def run(self, job: JobInput) -> list[Output]:
+        template = self.prepare(job)
+        files = _upload_inputs(self.client, job, ["image"])
+        views = prompts.VIEW_SETS.get(str(job.params.get("set", "design_6")), prompts.VIEW_SETS["design_6"])
+        seed = job.seed()
+        outs: list[Output] = []
+        for i, view in enumerate(views):
+            job.progress(i / len(views), f"{prompts.VIEW_LABELS[view]} ({i + 1}/{len(views)})")
+            graph = fill_template(template, {"prompt": prompts.view_prompt(job.params, view), "negative": " ",
+                                             "image": files["image"], "ref1": None, "ref2": None, "seed": seed,
+                                             **_megapixel_size(job)})
+            for f in self.client.run(graph, lambda p, m="": job.progress((i + p) / len(views), m)):
+                if f["filename"].lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                    img = Image.open(io.BytesIO(self.client.fetch(f)))
+                    img.load()
+                    outs.append(Output(image=img, meta={"seed": seed, "view": prompts.VIEW_LABELS[view]}))
+        return outs
+
+
 class ComfyAnimate(ComfyProvider):
     workflow, template_base, model = "animate", "animate", "Wan 2.2"
 

@@ -61,13 +61,13 @@ const IMAGE_INPUT_NODES = new Set(["image"]);
 // Compare is a board tool, not an AI workflow; it shares the picker's list format.
 /** Width a block needs on its row: itself plus the results it will place to its right. */
 function rowWidth(wf: Workflow) {
-  const count = Number(wf.params.find((p) => p.name === "count")?.default ?? 1);
+  const count = wf.id === "views" ? 3 : Math.min(4, Number(wf.params.find((p) => p.name === "count")?.default ?? 1));
   const each = wf.output === "video" ? 424 : 284;
   return TOOL_W + 90 + count * each;
 }
 
 /** Tools whose text field is optional: run straight away from the image toolbar. */
-const AUTO_RUN = new Set(["erase", "style"]);
+const AUTO_RUN = new Set(["erase", "style", "views"]);
 
 const COMPARE_ENTRY = {
   id: "compare",
@@ -176,12 +176,23 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
       const x0 = tool.position.x + toolSize.w + 90;
       let y = prior.length ? Math.max(...prior.map((n) => n.position.y + nodeSize(n).h)) + 40 : tool.position.y;
       let x = x0;
+      // Up to 4 in a row; bigger sets (e.g. 6 or 8 views) wrap into two rows.
+      const perRow = outputs.length <= 4 ? outputs.length : Math.ceil(outputs.length / 2);
+      let rowH = 0;
       const created: BoardNode[] = [];
-      outputs.forEach((o) => {
+      outputs.forEach((o, i) => {
+        if (i > 0 && i % perRow === 0) {
+          x = x0;
+          y += rowH + 40;
+          rowH = 0;
+        }
         const w = o.kind === "video" ? 400 : 260;
         const size = fitSize(o.asset.width ?? o.poster?.width ?? 16, o.asset.height ?? o.poster?.height ?? 9, w);
         const pos = rowSpot([...ns, ...created], { x, y }, size.width, size.height + 20);
         x = pos.x + size.width + 24;
+        rowH = Math.max(rowH, size.height + 20 + (pos.y - y));
+        const view = typeof o.meta?.view === "string" ? o.meta.view : "";
+        const label = view ? `${caption} · ${view}` : caption;
         if (o.kind === "video") {
           created.push({
             id: uid("vid"),
@@ -195,11 +206,11 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
               posterUrl: o.poster?.url,
               width: o.poster?.width ?? 1280,
               height: o.poster?.height ?? 720,
-              caption,
+              caption: label,
             },
           });
         } else {
-          created.push({ ...imageNode(o.asset, pos, { caption }), width: size.width, height: size.height });
+          created.push({ ...imageNode(o.asset, pos, { caption: label }), width: size.width, height: size.height });
         }
       });
       setNodes((cur) => [...cur, ...created]);

@@ -327,3 +327,15 @@ class MockStyle(Provider):
             arr = (src - s_mean) / s_std * (r_std * k + s_std * (1 - k)) + (r_mean * k + s_mean * (1 - k))
             outs.append(Output(image=imaging.to_pil(arr), meta={"seed": job.seed() + i}))
         return outs
+
+
+class MockViews(Provider):
+    workflow, backend, model = "views", "mock", "procedural"
+    ANGLES = {"front": 0, "front_left_34": 45, "left": 90, "rear_left_34": 135, "rear": 180, "rear_right_34": 225,
+              "right": 270, "front_right_34": 315, "top": 20}
+
+    def run(self, job: JobInput) -> list[Output]:
+        from .prompts import VIEW_LABELS, VIEW_SETS
+        src = _fit(imaging.flatten(job.images["image"]))
+        views = VIEW_SETS.get(str(job.params.get("set", "design_6")), VIEW_SETS["design_6"])
+        return [Output(image=_rotate_view(src, self.ANGLES[v]), meta={"view": VIEW_LABELS[v]}) for v in views]

@@ -99,3 +99,38 @@ def style_prompt(params: dict) -> str:
              " Keep image 1's object, exact shape, proportions, design details, its background content and"
              " composition unchanged.")
     return text
+
+
+VIEWS = {
+    "front": "straight front view, the camera faces the front of the object head-on at its centre height",
+    "front_left_34": "three-quarter front view from the front-left, camera slightly above centre height",
+    "left": "pure side view of the left side, camera perpendicular to the side, profile silhouette",
+    "rear_left_34": "three-quarter rear view from the rear-left, camera slightly above centre height",
+    "rear": "straight rear view, the camera faces the back of the object head-on",
+    "rear_right_34": "three-quarter rear view from the rear-right, camera slightly above centre height",
+    "right": "pure side view of the right side, camera perpendicular to the side, profile silhouette",
+    "front_right_34": "three-quarter front view from the front-right, camera slightly above centre height",
+    "top": "top view from directly above, plan view looking straight down",
+}
+VIEW_LABELS = {
+    "front": "Front", "front_left_34": "3/4 front left", "left": "Left side", "rear_left_34": "3/4 rear left",
+    "rear": "Rear", "rear_right_34": "3/4 rear right", "right": "Right side", "front_right_34": "3/4 front right",
+    "top": "Top",
+}
+VIEW_SETS = {
+    "design_6": ["front", "left", "rear", "top", "front_left_34", "rear_right_34"],
+    "ortho_4": ["front", "left", "rear", "top"],
+    "turnaround_8": ["front", "front_right_34", "right", "rear_right_34", "rear", "rear_left_34", "left",
+                     "front_left_34"],
+}
+
+
+def view_prompt(params: dict, view: str) -> str:
+    what = str(params.get("prompt", "")).strip().rstrip(".") or "object"
+    text = (f"Show the exact same {what} from a new camera position: {VIEWS[view]}. "
+            "Keep its design, shape, proportions, colours, materials and every detail identical, only the camera moves.")
+    if str(params.get("scene", "same_scene")) == "studio":
+        text += " Place it on a plain light grey studio backdrop with soft, even lighting."
+    else:
+        text += " Keep the same environment, ground, background and lighting, seen from this new angle."
+    return text
