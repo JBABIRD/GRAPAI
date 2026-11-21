@@ -423,22 +423,33 @@ class ComfyOutpaint(ComfyInpaint):
         left, top, right, bottom = imaging.outpaint_pads(job.params, src.size)
         arr = np.pad(np.asarray(src), ((top, bottom), (left, right), (0, 0)), mode="edge")
         canvas = Image.fromarray(arr)
+        # Plain background (paper, studio sweep) and no scene asked for: continue it directly instead of
+        # letting klein invent a scene (a white-paper car sketch came back as a sunset with reflections).
+        bg = imaging.plain_border(src) if prompts.is_blank_prompt(job.params.get("prompt")) else None
+        if bg is not None:
+            out = Image.new("RGB", canvas.size, bg)
+            out.paste(src, (left, top))
+            return [Output(image=out, meta={"seed": job.seed(), "note": "plain background continued, no AI"})]
         # Heavily blur the stretched border (60 px at the ~1 MP working size) so klein doesn't copy its
         # streaks; the original goes back unblurred. Tested on the laptop: no streaks or sky blocks.
         mp = float(load_template(self.template_name(job), self.target(job)[1]).get("_meta", {}).get("megapixels", 1.0))
         work_w = _size_for(canvas.size, mp)["width"]
         scale = canvas.width / work_w
+        # Overlap into the original: 96 px at working size, but never more than 15% of the original's short
+        # side there. On a big extension the original is small at working size and a fixed 96 px overlap
+        # regenerated almost all of it (the subject came back faded).
+        ov = int(max(8, min(96, 0.15 * min(src.size) / scale)))
         sharp = canvas
         blurred = canvas.filter(ImageFilter.GaussianBlur(60 * scale))
         hole = Image.new("L", canvas.size, 255)
         hole.paste(0, (left, top, left + src.width, top + src.height))
-        # Fade the sharp original into the blurred border (erode 48 px, blur 32 px at working size).
+        # Fade the sharp original into the blurred border (erode ov/2, blur ov/3 at working size).
         # A hard paste puts a rectangle into the start image and reference, and klein reproduced it.
-        alpha = ImageOps.invert(imaging.dilate(hole, int(48 * scale))).filter(ImageFilter.GaussianBlur(32 * scale))
+        alpha = ImageOps.invert(imaging.dilate(hole, int(ov / 2 * scale))).filter(ImageFilter.GaussianBlur(ov / 3 * scale))
         canvas = Image.composite(sharp, blurred, alpha)
-        # Wide, soft join (96 px overlap, 48 px blur at working size): a narrow one left a visible box
+        # Wide, soft join (overlap ov, blur ov/2 at working size): a narrow one left a visible box
         # where the new sky's blue differed slightly from the original's.
-        outs = self.inpaint(job, canvas, hole, prompts.outpaint_prompt(job.params), grow=2 * 96 + 1, blur=48)
+        outs = self.inpaint(job, canvas, hole, prompts.outpaint_prompt(job.params), grow=2 * ov + 1, blur=ov / 2)
         # Reference = the padded canvas. Tested: the unpadded original as reference duplicated the
         # subject or left a sky rectangle; the scene description is what fixes weak fills.
         return [Output(image=o, meta={"seed": job.seed()}) for o in outs]

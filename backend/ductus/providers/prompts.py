@@ -69,14 +69,25 @@ def erase_prompt(params: dict) -> str:
             "same surfaces, texture, lighting and perspective. Keep everything else unchanged.")
 
 
+BLANK_WORDS = {"", "nothing", "none", "no", "empty", "blank", "plain", "nothing else", "n/a", "-", "same", "keep"}
+
+
+def is_blank_prompt(text) -> bool:
+    """'nothing', 'none', 'empty'... mean 'no new content', not a scene to describe."""
+    return str(text or "").strip().strip(".!").lower() in BLANK_WORDS
+
+
 def outpaint_prompt(params: dict) -> str:
-    extra = str(params.get("prompt", "")).strip()
-    base = ("Extend the photo outward: the same scene continues naturally beyond the original edges, matching "
-            "ground, background, sky, lighting, reflections and perspective.")
-    if extra:
+    extra = str(params.get("prompt", "")).strip().rstrip(".")
+    base = ("Extend the image outward in exactly the same medium and style (photo, sketch, drawing or render): "
+            "the same background continues naturally beyond the original edges, matching its colour, texture, "
+            "lighting and perspective.")
+    if is_blank_prompt(extra):
+        base += " If the background is plain, keep it plain and empty."
+    else:
         base += f" Around it: {extra}."
     return base + (" Do not add any vehicles, people, buildings, text or other new objects."
-                   " Do not repeat or duplicate the main subject.")
+                   " Do not repeat or duplicate the main subject, and add no reflections of it.")
 
 
 STYLE_ASPECTS = {

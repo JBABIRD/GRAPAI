@@ -203,6 +203,19 @@ def mask_box(mask: Image.Image, margin: float = 0.6, min_side: int = 384) -> tup
     return nx0, ny0, int(min(w, nx0 + gw)), int(min(h, ny0 + gh))
 
 
+def plain_border(image: Image.Image, share: float = 0.85, tol: float = 18.0) -> tuple[int, int, int] | None:
+    """If the image's outer band is mostly one flat colour (paper, studio white), return that colour.
+    Lines may touch the edge (a cropped sketch), so it is the share of near-background pixels that counts."""
+    a = np.asarray(image.convert("RGB"), dtype=np.float32)
+    b = max(4, int(0.03 * min(a.shape[:2])))
+    band = np.concatenate([a[:b].reshape(-1, 3), a[-b:].reshape(-1, 3), a[:, :b].reshape(-1, 3), a[:, -b:].reshape(-1, 3)])
+    med = np.median(band, axis=0)
+    near = np.abs(band - med).max(axis=1) < tol
+    if near.mean() < share or float(band[near].std(axis=0).max()) > 6:
+        return None
+    return tuple(int(round(v)) for v in band[near].mean(axis=0))  # type: ignore[return-value]
+
+
 def outpaint_pads(params: dict, size: tuple[int, int], max_side: int = 4096) -> tuple[int, int, int, int]:
     """Left/top/right/bottom padding in source pixels, clamped so the canvas stays <= max_side."""
     w, h = size

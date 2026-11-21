@@ -2,7 +2,7 @@ import pytest
 import json
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from ductus.providers import comfy
 from ductus.providers.base import JobInput
@@ -199,7 +199,8 @@ def test_outpaint_keeps_original_and_fills_new_area():
     p.client = srv
     src = Image.new("RGB", (800, 600), "white")
     outs = p.run(JobInput(images={"image": src},
-                          params={"mode": "fast", "count": 1, "seed": 1, "left": 200, "right": 0, "top": 0, "bottom": 100}))
+                          params={"mode": "fast", "count": 1, "seed": 1, "left": 200, "right": 0, "top": 0, "bottom": 100,
+                                  "prompt": "a sandy beach"}))
     out = outs[0].image
     assert out.size == (1000, 700)
     up = srv.uploads["image"].size
@@ -207,6 +208,32 @@ def test_outpaint_keeps_original_and_fills_new_area():
     assert out.getpixel((20, 300))[2] > 200          # new area from the model
     assert srv.graph["12"]["inputs"]["image"] == "image.png"  # reference = the padded canvas (tested best)
     assert out.getpixel((600, 300)) == (255, 255, 255)  # original pixels back
+
+
+def test_outpaint_plain_background_needs_no_model():
+    srv = _BlueServer()
+    p = comfy.ComfyOutpaint()
+    p.client = srv
+    src = Image.new("RGB", (800, 400), (250, 250, 248))
+    ImageDraw.Draw(src).line((0, 300, 800, 120), fill=(40, 40, 40), width=6)  # a line touching the edges
+    outs = p.run(JobInput(images={"image": src},
+                          params={"mode": "fast", "count": 1, "seed": 1, "left": 100, "top": 300, "prompt": "nothing"}))
+    out = outs[0].image
+    assert out.size == (900, 700) and not srv.uploads
+    assert out.getpixel((10, 10)) == (250, 250, 248) and out.getpixel((500, 500)) == src.getpixel((400, 200))
+
+
+def test_outpaint_overlap_spares_a_small_original():
+    srv = _BlueServer()
+    p = comfy.ComfyOutpaint()
+    p.client = srv
+    src = Image.new("RGB", (600, 260), "white")
+    ImageDraw.Draw(src).rectangle((0, 0, 600, 60), fill="green")  # not a plain border
+    outs = p.run(JobInput(images={"image": src},
+                          params={"mode": "fast", "count": 1, "seed": 1, "left": 400, "right": 400, "top": 1200, "bottom": 300,
+                                  "prompt": "a studio"}))
+    out = outs[0].image
+    assert out.getpixel((400 + 300, 1200 + 150)) == (255, 255, 255)  # centre of the original stays exact
 
 
 def test_style_sends_image_and_reference():
