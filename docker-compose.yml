@@ -1,0 +1,16 @@
+services:
+  ductus:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ductus-data:/data
+    environment:
+      # "mock" runs without a GPU. Set to "comfy" and point at your ComfyUI server for the real models.
+      DUCTUS_PROVIDER: ${DUCTUS_PROVIDER:-mock}
+      DUCTUS_COMFY_URL: ${DUCTUS_COMFY_URL:-http://host.docker.internal:8188}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  ductus-data:

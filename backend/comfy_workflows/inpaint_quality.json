@@ -1,0 +1,231 @@
+{
+  "_meta": {
+    "title": "Erase / outpaint (quality, rented GPU)",
+    "model": "Qwen-Image-Edit-2511 (Apache-2.0), 20B",
+    "files": {
+      "diffusion_models": "qwen_image_edit_2511_bf16.safetensors",
+      "text_encoders": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "vae": "qwen_image_vae.safetensors"
+    },
+    "note": "True inpainting with Qwen-Image-Edit: the vision-language encoder sees the whole image, SetLatentNoiseMask + DifferentialDiffusion limit generation to the soft mask, ImageCompositeMasked keeps the rest exact. Needs ~24 GB+ (rented GPU).",
+    "megapixels": 1.5,
+    "mode": "quality: 30 steps, cfg 4",
+    "placeholders": [
+      "image",
+      "mask",
+      "prompt",
+      "negative",
+      "seed",
+      "ref1 (optional)"
+    ]
+  },
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "qwen_image_edit_2511_bf16.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    }
+  },
+  "5": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "shift": 3.1
+    }
+  },
+  "6": {
+    "class_type": "CFGNorm",
+    "inputs": {
+      "model": [
+        "5",
+        0
+      ],
+      "strength": 1.0
+    }
+  },
+  "7": {
+    "class_type": "DifferentialDiffusion",
+    "inputs": {
+      "model": [
+        "6",
+        0
+      ]
+    }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{image}}"
+    }
+  },
+  "11": {
+    "class_type": "LoadImageMask",
+    "inputs": {
+      "image": "{{mask}}",
+      "channel": "red"
+    }
+  },
+  "20": {
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "inputs": {
+      "clip": [
+        "2",
+        0
+      ],
+      "prompt": "{{prompt}}",
+      "vae": [
+        "3",
+        0
+      ],
+      "image1": [
+        "10",
+        0
+      ],
+      "image2": [
+        "40",
+        0
+      ]
+    }
+  },
+  "21": {
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "inputs": {
+      "clip": [
+        "2",
+        0
+      ],
+      "prompt": "{{negative}}",
+      "vae": [
+        "3",
+        0
+      ],
+      "image1": [
+        "10",
+        0
+      ],
+      "image2": [
+        "40",
+        0
+      ]
+    }
+  },
+  "22": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "10",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "23": {
+    "class_type": "SetLatentNoiseMask",
+    "inputs": {
+      "samples": [
+        "22",
+        0
+      ],
+      "mask": [
+        "11",
+        0
+      ]
+    }
+  },
+  "30": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "7",
+        0
+      ],
+      "seed": "{{seed}}",
+      "steps": 30,
+      "cfg": 4.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "positive": [
+        "20",
+        0
+      ],
+      "negative": [
+        "21",
+        0
+      ],
+      "latent_image": [
+        "23",
+        0
+      ],
+      "denoise": 1.0
+    }
+  },
+  "31": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "30",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "33": {
+    "class_type": "ImageCompositeMasked",
+    "inputs": {
+      "destination": [
+        "10",
+        0
+      ],
+      "source": [
+        "31",
+        0
+      ],
+      "x": 0,
+      "y": 0,
+      "resize_source": false,
+      "mask": [
+        "11",
+        0
+      ]
+    }
+  },
+  "32": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "33",
+        0
+      ],
+      "filename_prefix": "ductus/inpaint"
+    }
+  },
+  "40": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{ref1}}"
+    }
+  }
+}
