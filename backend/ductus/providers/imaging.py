@@ -203,15 +203,18 @@ def mask_box(mask: Image.Image, margin: float = 0.6, min_side: int = 384) -> tup
     return nx0, ny0, int(min(w, nx0 + gw)), int(min(h, ny0 + gh))
 
 
-def plain_border(image: Image.Image, share: float = 0.85, tol: float = 18.0) -> tuple[int, int, int] | None:
-    """If the image's outer band is mostly one flat colour (paper, studio white), return that colour.
-    Lines may touch the edge (a cropped sketch), so it is the share of near-background pixels that counts."""
+def plain_border(image: Image.Image, tol: float = 18.0) -> tuple[int, int, int] | None:
+    """If the image's edges are mostly one flat colour (paper, studio white), return that colour.
+    The subject may be cut off at one edge (laptop test: a car sketch had 0.72 near-white at the bottom),
+    so at least 3 of the 4 edge bands must be >= 80% near-background and all four together >= 70%."""
     a = np.asarray(image.convert("RGB"), dtype=np.float32)
     b = max(4, int(0.03 * min(a.shape[:2])))
-    band = np.concatenate([a[:b].reshape(-1, 3), a[-b:].reshape(-1, 3), a[:, :b].reshape(-1, 3), a[:, -b:].reshape(-1, 3)])
+    edges = [a[:b].reshape(-1, 3), a[-b:].reshape(-1, 3), a[:, :b].reshape(-1, 3), a[:, -b:].reshape(-1, 3)]
+    band = np.concatenate(edges)
     med = np.median(band, axis=0)
     near = np.abs(band - med).max(axis=1) < tol
-    if near.mean() < share or float(band[near].std(axis=0).max()) > 6:
+    shares = [float((np.abs(e - med).max(axis=1) < tol).mean()) for e in edges]
+    if near.mean() < 0.7 or sum(v >= 0.8 for v in shares) < 3 or float(band[near].std(axis=0).max()) > 6:
         return None
     return tuple(int(round(v)) for v in band[near].mean(axis=0))  # type: ignore[return-value]
 

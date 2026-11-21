@@ -216,6 +216,7 @@ def test_outpaint_plain_background_needs_no_model():
     p.client = srv
     src = Image.new("RGB", (800, 400), (250, 250, 248))
     ImageDraw.Draw(src).line((0, 300, 800, 120), fill=(40, 40, 40), width=6)  # a line touching the edges
+    ImageDraw.Draw(src).rectangle((100, 330, 700, 400), fill=(60, 60, 60))   # subject cut off at the bottom
     outs = p.run(JobInput(images={"image": src},
                           params={"mode": "fast", "count": 1, "seed": 1, "left": 100, "top": 300, "prompt": "nothing"}))
     out = outs[0].image
