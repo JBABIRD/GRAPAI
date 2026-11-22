@@ -8,6 +8,8 @@ Sketch, generate, edit and animate on an **infinite canvas**. Images connect to 
 
 > Status: phase 1 (canvas + image tools + first video tool). Runs fully in **preview mode** without a GPU; connect a ComfyUI server to use the real models.
 
+> **Windows laptop with an NVIDIA GPU (8 GB+)?** Double-click `Install-GRAPAI.cmd`: it installs everything for your user account, with no admin rights. See [docs/windows-install.md](docs/windows-install.md).
+
 ## Features
 
 | Tool | What it does | Default open model | Licence |

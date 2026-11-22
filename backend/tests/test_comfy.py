@@ -305,3 +305,10 @@ def test_place_product_shrinks_onto_ground():
     assert (x1 - x0, y1 - y0) == (200, 300)
     assert abs((x0 + x1) / 2 - 500) <= 1 and abs(y1 - 720) <= 1
     assert product.getpixel((500, 600)) == (200, 30, 30)
+
+
+def test_profile_quality_falls_back_to_profile_fast():
+    fast = comfy.load_template("create_fast", "laptop")
+    assert comfy.load_template("create_quality", "laptop") == fast
+    assert comfy.load_template("inpaint_quality", "laptop") != comfy.load_template("inpaint_fast", "laptop")
+    assert comfy.load_template("create_quality") != fast

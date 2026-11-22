@@ -1,0 +1,48 @@
+{
+  "_comment": "Pinned downloads for install.ps1. Sizes and SHA-256 values were verified on the reference laptop install (2026-11-20). All models allow commercial use: Apache-2.0, except BiRefNet (MIT) and Real-ESRGAN (BSD-3).",
+  "min_driver": 570,
+  "comfyui": {
+    "version": "v0.46.0",
+    "asset": "ComfyUI_windows_portable_nvidia.7z",
+    "url": "https://github.com/Comfy-Org/ComfyUI/releases/download/v0.46.0/ComfyUI_windows_portable_nvidia.7z",
+    "size": 2085169944,
+    "sha256": "6a5255c7ec01fdc54bdbd8e4507073cf6acda2fbeea74ae1829a50681af5fac6"
+  },
+  "gguf_node": {
+    "commit": "6ea2651e7df66d7585f6ffee804b20e92fb38b8a",
+    "url": "https://github.com/city96/ComfyUI-GGUF/archive/6ea2651e7df66d7585f6ffee804b20e92fb38b8a.zip",
+    "sha256": ""
+  },
+  "node": {
+    "version": "v22.12.0",
+    "asset": "node-v22.12.0-win-x64.zip",
+    "url": "https://nodejs.org/dist/v22.12.0/node-v22.12.0-win-x64.zip",
+    "sha256": "2b8f2256382f97ad51e29ff71f702961af466c4616393f767455501e6aece9b8"
+  },
+  "birefnet": {
+    "folder": "models\\BiRefNet",
+    "files": [
+      {"file": "model.safetensors", "url": "https://huggingface.co/ZhengPeng7/BiRefNet/resolve/e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4/model.safetensors", "size": 444473596, "sha256": "9ab37426bf4de0567af6b5d21b16151357149139362e6e8992021b8ce356a154"},
+      {"file": "config.json", "url": "https://huggingface.co/ZhengPeng7/BiRefNet/resolve/e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4/config.json"},
+      {"file": "birefnet.py", "url": "https://huggingface.co/ZhengPeng7/BiRefNet/resolve/e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4/birefnet.py"},
+      {"file": "BiRefNet_config.py", "url": "https://huggingface.co/ZhengPeng7/BiRefNet/resolve/e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4/BiRefNet_config.py"}
+    ]
+  },
+  "esrgan": {
+    "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
+    "size": 67040989,
+    "sha256": "4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1"
+  },
+  "models": [
+    {"group": "image", "folder": "unet", "file": "z_image_turbo-Q5_K_M.gguf", "url": "https://huggingface.co/jayn7/Z-Image-Turbo-GGUF/resolve/6e2dff8e3abd78051c1211fb5833a03818a2f3cc/z_image_turbo-Q5_K_M.gguf", "size": 5522742336, "sha256": "cd2abb4bc76dbecc8c1d14658342c37db12d5b09874f96fa9adc8a28e62b2056"},
+    {"group": "image", "folder": "text_encoders", "file": "Qwen3-4B-Q4_K_M.gguf", "url": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf", "size": 2497280256, "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5"},
+    {"group": "image", "folder": "vae", "file": "ae.safetensors", "url": "https://huggingface.co/Comfy-Org/Z-Image-Turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/vae/ae.safetensors", "size": 335304388, "sha256": "afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38"},
+    {"group": "image", "folder": "diffusion_models", "file": "flux-2-klein-4b-fp8.safetensors", "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4b-fp8/resolve/5b4408e59397a4a37ccb46afe426d8ed86379441/flux-2-klein-4b-fp8.safetensors", "size": 4070624520, "sha256": "97ed34fe0567e436200f2faee3939b88f2b5d99f8af2a4dc16532c4245c0ccb6"},
+    {"group": "image", "folder": "diffusion_models", "file": "flux-2-klein-base-4b-fp8.safetensors", "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-base-4b-fp8/resolve/103db268c10d4d3921101b46057671f9ac460da6/flux-2-klein-base-4b-fp8.safetensors", "size": 4089498488, "sha256": "44bab3a86fe98b85d21dd2a4729ebdc3ae51fb8a39f76e457e18c724219e6840"},
+    {"group": "image", "folder": "text_encoders", "file": "qwen_3_4b.safetensors", "url": "https://huggingface.co/Comfy-Org/Flux-2-Klein-4B/resolve/5b3abca5c0dc1ecd4eaf3340868d09063fc1c965/split_files/text_encoders/qwen_3_4b.safetensors", "size": 8044982048, "sha256": "6c671498573ac2f7a5501502ccce8d2b08ea6ca2f661c458e708f36b36edfc5a"},
+    {"group": "image", "folder": "vae", "file": "flux2-vae.safetensors", "url": "https://huggingface.co/Comfy-Org/Flux-2-Klein-4B/resolve/5b3abca5c0dc1ecd4eaf3340868d09063fc1c965/split_files/vae/flux2-vae.safetensors", "size": 336211292, "sha256": "868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3"},
+    {"group": "video", "folder": "unet", "file": "Wan2.2-TI2V-5B-Q4_K_M.gguf", "url": "https://huggingface.co/QuantStack/Wan2.2-TI2V-5B-GGUF/resolve/57437632ddd08bdcbd1508c866aa22e126ed51d2/Wan2.2-TI2V-5B-Q4_K_M.gguf", "size": 3433116000, "sha256": "95b19697b7f98e65b0a543640e9ca7b4dfec32e2a6e3731e8e10708be52655e2"},
+    {"group": "video", "folder": "text_encoders", "file": "umt5-xxl-encoder-Q4_K_M.gguf", "url": "https://huggingface.co/city96/umt5-xxl-encoder-gguf/resolve/b535255bee98c2b0a59ea7c0ae2dcd0c6657b3b7/umt5-xxl-encoder-Q4_K_M.gguf", "size": 3655145312, "sha256": "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40"},
+    {"group": "video", "folder": "vae", "file": "wan2.2_vae.safetensors", "url": "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/5df3a4a3ed0628002308022198249dbbbd045d09/split_files/vae/wan2.2_vae.safetensors", "size": 1409400960, "sha256": "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156"}
+  ]
+}

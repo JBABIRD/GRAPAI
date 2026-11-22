@@ -141,9 +141,13 @@ class ComfyClient:
 
 
 def load_template(name: str, profile: str = "") -> dict:
-    """A profile folder (e.g. comfy_workflows/laptop/) overrides the default graph."""
+    """A profile folder (e.g. comfy_workflows/laptop/) overrides the default graph. A profile without its own
+    quality graph uses its fast one, so Quality mode never reaches for models the profile's machine lacks."""
     root = Path(settings.comfy_workflows)
-    for path in ([root / profile / f"{name}.json"] if profile else []) + [root / f"{name}.json"]:
+    candidates = [root / profile / f"{name}.json"] if profile else []
+    if profile and name.endswith("_quality"):
+        candidates.append(root / profile / f"{name[:-len('_quality')]}_fast.json")
+    for path in candidates + [root / f"{name}.json"]:
         if path.exists():
             return json.loads(path.read_text())
     raise ComfyError(f"missing ComfyUI template {name}.json (profile {profile or 'default'})")
