@@ -61,6 +61,8 @@ try {
     # BiRefNet from the pinned local copy the installer downloaded (no network needed at run time).
     $bg = Join-Path $Root "data\models\BiRefNet"
     if (Test-Path (Join-Path $bg "model.safetensors")) { $env:DUCTUS_BG_MODEL = $bg }
+    $vlm = Join-Path $Root "data\models\Qwen3-VL-2B-Instruct"
+    if (Test-Path (Join-Path $vlm "model.safetensors")) { $env:DUCTUS_STYLE_VLM = $vlm }
     $apiLog = Join-Path $Logs "grapai.log"
     $api = Start-Process -FilePath $Py -ArgumentList @("-s", "-m", "uvicorn", "ductus.api:app", "--app-dir", "app\backend", "--host", "127.0.0.1", "--port", "$GrapaiPort") `
         -WorkingDirectory $Root -NoNewWindow -PassThru -RedirectStandardOutput $apiLog -RedirectStandardError "$apiLog.err"

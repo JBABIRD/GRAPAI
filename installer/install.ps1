@@ -161,7 +161,7 @@ try {
     else { Say "    8 GB mode" }
 
     $models = @($Manifest.models | Where-Object { -not ($NoVideo -and $_.group -eq "video") -and (-not $_.tier -or $_.tier -eq $Tier) })
-    $needGb = 12
+    $needGb = 17
     if (-not $SkipModels) { $needGb += [math]::Ceiling((($models | Measure-Object -Property size -Sum).Sum) / 1GB) }
     $drive = Get-PSDrive -Name ((Resolve-Path $InstallDir).Path.Substring(0, 1))
     $freeGb = [math]::Floor($drive.Free / 1GB)
@@ -258,6 +258,11 @@ try {
     foreach ($f in $Manifest.birefnet.files) {
         $size = 0; if ($f.size) { $size = [long]$f.size }
         Get-File $f.url (Join-Path $InstallDir ("data\{0}\{1}" -f $Manifest.birefnet.folder, $f.file)) $f.sha256 $size
+    }
+    Step "Style reader for Style transfer (Qwen3-VL 2B)"
+    foreach ($f in $Manifest.style_vlm.files) {
+        $sha = ""; if ($f.sha256) { $sha = $f.sha256 }
+        Get-File $f.url (Join-Path $InstallDir ("data\{0}\{1}" -f $Manifest.style_vlm.folder, $f.file)) $sha ([long]$f.size)
     }
     $esrgan = Join-Path $InstallDir ("data\models\" + (Split-Path -Leaf $Manifest.esrgan.url))
     Get-File $Manifest.esrgan.url $esrgan $Manifest.esrgan.sha256 ([long]$Manifest.esrgan.size)

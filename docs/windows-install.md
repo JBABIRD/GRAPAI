@@ -6,7 +6,7 @@
 - An NVIDIA GPU with **8 GB of VRAM or more** and a recent NVIDIA driver (570 or newer). With **12 GB or more**, the installer picks the 12 GB mode by itself (see below)
 - 16 GB of RAM (32 GB if you want to make videos)
 - About **45 GB of free disk space** in 8 GB mode, about **55 GB** in 12 GB mode (less without video)
-- A good internet connection: the first install downloads about 34 GB (8 GB mode) or 42 GB (12 GB mode)
+- A good internet connection: the first install downloads about 39 GB (8 GB mode) or 47 GB (12 GB mode)
 
 You do **not** need admin rights, Python, Node.js or Git. Nothing is installed system-wide.
 
@@ -83,5 +83,6 @@ All models allow commercial use (Apache-2.0; BiRefNet is MIT, Real-ESRGAN is BSD
 | Render, Edit, New view, Erase, Extend, Style, Views, Environment | FLUX.2 klein 4B (fp8); Quality mode for Erase and Extend uses klein Base 4B |
 | Animate | Wan 2.2 TI2V 5B (GGUF Q4) |
 | Extend (outpaint) | FLUX.2 klein 4B with the fal outpaint LoRA (Apache-2.0) |
+| Style transfer (reading the reference) | Qwen3-VL 2B Instruct (Apache-2.0) |
 | Cut out | BiRefNet |
 | Upscale | Real-ESRGAN x4plus |
