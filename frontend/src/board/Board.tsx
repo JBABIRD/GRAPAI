@@ -192,7 +192,8 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
         x = pos.x + size.width + 24;
         rowH = Math.max(rowH, size.height + 20 + (pos.y - y));
         const view = typeof o.meta?.view === "string" ? o.meta.view : "";
-        const label = view ? `${caption} · ${view}` : caption;
+        const style = typeof o.meta?.style === "string" ? o.meta.style : "";
+        const label = view ? `${caption} · ${view}` : style ? `${caption} · style read: ${style}` : caption;
         if (o.kind === "video") {
           created.push({
             id: uid("vid"),

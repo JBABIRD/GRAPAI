@@ -33,6 +33,9 @@ class Settings:
 
     # Small models run in-process (CPU works, GPU is faster).
     bg_model: str = field(default_factory=lambda: _env("DUCTUS_BG_MODEL", "ZhengPeng7/BiRefNet"))
+    # Vision-language model that writes a reference image's style in words for Style transfer (a Hugging Face
+    # repo id or a local folder, e.g. Qwen/Qwen3-VL-2B-Instruct). Empty: style transfer works without it.
+    style_vlm: str = field(default_factory=lambda: _env("DUCTUS_STYLE_VLM", ""))
     upscale_weights: str = field(
         default_factory=lambda: _env(
             "DUCTUS_UPSCALE_WEIGHTS",

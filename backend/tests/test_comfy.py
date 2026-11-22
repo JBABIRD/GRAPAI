@@ -350,8 +350,38 @@ def test_style_with_a_drawing_reference_redraws_in_its_ink():
     p.run(JobInput(images={"image": photo, "style": sketch},
                    params={"mode": "fast", "count": 1, "seed": 1, "transfer": "full", "prompt": "render image 1 in the style of image 2"}))
     text = json.dumps(srv.graph)
-    assert "blue pen sketch on white paper" in text and "render image 1 in the style" not in text
+    assert "hand drawing in blue ink on white paper" in text and "render image 1 in the style" not in text
     assert srv.uploads["image"].getpixel((20, 20)) == (90, 110, 70)  # no ink pre-pass by default
     p.run(JobInput(images={"image": photo, "style": sketch},
                    params={"mode": "fast", "count": 1, "seed": 1, "transfer": "full", "prep": True}))
     assert srv.uploads["image"].getpixel((20, 20))[0] > 200  # with prep, image 1 goes up as ink on paper
+
+
+def test_style_uses_the_reference_description(monkeypatch):
+    from ductus.providers import local
+    monkeypatch.setattr(local, "describe_style", lambda img: "thick impasto oil paint, warm ochre palette, visible brush strokes")
+    srv = _BlueServer()
+    p = comfy.ComfyStyle()
+    p.client = srv
+    outs = p.run(JobInput(images={"image": Image.new("RGB", (800, 500), "grey"), "style": Image.new("RGB", (400, 400), (200, 120, 40))},
+                          params={"mode": "fast", "count": 1, "seed": 1, "transfer": "full", "prompt": ""}))
+    text = json.dumps(srv.graph)
+    assert "The style of image 2: thick impasto oil paint" in text and "exact shape, proportions" in text
+    assert outs[0].meta["style"].startswith("thick impasto")
+
+
+def test_clean_style_text_drops_content_and_adds_ink():
+    from ductus.providers import prompts
+    t = ("A clean, minimalist sketch with a monochromatic blue-gray palette, using fine pencil lines. "
+         "The background is stark white, emphasizing the car's form and the design team's signature.")
+    out = prompts.clean_style_text(t, {"kind": "drawing", "colour": "blue"})
+    assert "signature" not in out and "car" not in out and "blue-gray palette" in out
+    assert out.endswith("drawn in strong blue ink like image 2 on white paper")
+    assert prompts.clean_style_text(None, {"kind": "color"}) is None
+
+
+def test_clean_style_text_keeps_marker_tones():
+    from ductus.providers import prompts
+    out = prompts.clean_style_text("Alcohol marker rendering with grey tones and an orange accent. Clean outlines.",
+                                   {"kind": "drawing", "colour": "black"})
+    assert "black ink" not in out and out == "Alcohol marker rendering with grey tones and an orange accent; clean outlines"

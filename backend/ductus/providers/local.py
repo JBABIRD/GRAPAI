@@ -122,3 +122,68 @@ class ESRGANUpscale(Provider):
         if alpha is not None:
             big.putalpha(alpha.resize(big.size, Image.LANCZOS))
         return [Output(image=big)]
+
+
+# ---------------------------------------------------------------- style reader
+STYLE_QUESTION = (
+    "Describe only the visual style of this image, so that an artist could apply the same style to a completely "
+    "different picture: the medium and technique, line quality and strokes, colour palette, shading and rendering, "
+    "lighting, surface texture and how the background is treated. Do not mention what is depicted (no objects, "
+    "vehicles, people, brands or text). Answer in one or two sentences, at most 60 words."
+)
+_style_lock = threading.Lock()
+_style_cache: dict[str, str] = {}
+_style_model: dict = {}
+
+
+def _style_key(image: Image.Image) -> tuple[str, Image.Image]:
+    import hashlib
+
+    small = image.convert("RGB")
+    small.thumbnail((768, 768))
+    return hashlib.sha1(small.tobytes()).hexdigest(), small
+
+
+def style_is_cached(image: Image.Image) -> bool:
+    return _style_key(image)[0] in _style_cache
+
+
+def describe_style(image: Image.Image) -> str | None:
+    """Write the style of a reference image in words with a small local vision-language model
+    (settings.style_vlm, e.g. Qwen3-VL-2B-Instruct, Apache-2.0). Returns None when none is configured.
+
+    The model runs on the GPU only when enough VRAM is free next to ComfyUI, otherwise on the CPU, and it is
+    moved off the GPU after each answer. Answers are cached per image."""
+    if not settings.style_vlm:
+        return None
+    key, small = _style_key(image)
+    if key in _style_cache:
+        return _style_cache[key]
+    with _style_lock:
+        import torch
+        from transformers import AutoModelForImageTextToText, AutoProcessor
+
+        if not _style_model:
+            _style_model["processor"] = AutoProcessor.from_pretrained(settings.style_vlm)
+            _style_model["model"] = AutoModelForImageTextToText.from_pretrained(settings.style_vlm, dtype=torch.bfloat16).eval()
+        processor, model = _style_model["processor"], _style_model["model"]
+        dev = torch.device("cpu")
+        if torch.cuda.is_available() and settings.device.startswith("cuda"):
+            free, _ = torch.cuda.mem_get_info()
+            if free > 5 * 1024**3:
+                dev = torch.device(settings.device)
+        model.to(dev, dtype=torch.bfloat16 if dev.type == "cuda" else torch.float32)
+        try:
+            messages = [{"role": "user", "content": [{"type": "image", "image": small}, {"type": "text", "text": STYLE_QUESTION}]}]
+            inputs = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True,
+                                                   return_dict=True, return_tensors="pt").to(dev)
+            with torch.inference_mode():
+                out = model.generate(**inputs, max_new_tokens=110, do_sample=False)
+            text = processor.batch_decode(out[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)[0].strip()
+        finally:
+            if dev.type == "cuda":
+                model.to("cpu")
+                torch.cuda.empty_cache()
+    text = " ".join(text.split()).strip().rstrip(".")
+    _style_cache[key] = text
+    return text or None

@@ -113,32 +113,57 @@ STYLE_ASPECTS = {
 GENERIC_STYLE = re.compile(r"^(render|restyle|redraw|make|turn|transfer|apply|use)?\s*(image ?1|it|this)?\s*(in|into|to|with)?\s*(the)?\s*(style|look)\s*(of)?\s*(image ?2|the reference|reference)?\.?$", re.I)
 
 
-def drawing_style_prompt(params: dict, info: dict) -> str:
-    """Image 2 is a monochrome drawing on paper (read by imaging.analyze_style)."""
-    what = str(params.get("what", "") or "").strip() or "subject"
-    desc = str(params.get("prompt", "")).strip().rstrip(".")
-    medium = f"loose hand-drawn {info['colour']} pen sketch on white paper"
-    text = (f"Redraw image 1 as a {medium}, in exactly the drawing style of image 2: the same {info['colour']} ink, "
-            "the same loose, confident strokes, construction lines and hatching, white paper showing through. "
-            "No colour fill, no photographic textures, no reflections rendered realistically. "
-            f"Keep image 1's {what}: its exact shape, proportions, design lines, viewpoint and composition. "
-            "Draw the surroundings only with a few light sketchy lines, fading out to white paper.")
-    if desc and not GENERIC_STYLE.match(desc):
-        text += f" {desc}."
-    return text + " Image 2 is only a style reference: do not copy its objects, vehicles or text."
+CONTENT_WORDS = re.compile(r"\b(signature|signed|text|lettering|logo|brand|label|caption|title|design team|company|"
+                           r"car|cars|vehicle|vehicles|person|people|figure|harbou?r|boat|shoe|sneaker|building)s?\b", re.I)
 
 
-def style_prompt(params: dict) -> str:
-    """Laptop tests (car x sketch / ice photo): 'Redraw' turned photo references into illustrations;
-    'Re-render ... with the look of image 2' plus an explicit 'image 2 is only a reference' sentence keeps
-    image 2's objects and landscape out, and a described style or light makes the transfer reliable."""
+def clean_style_text(text: str | None, info: dict | None = None) -> str | None:
+    """Keep only the style in the reader's answer: drop sentences or clauses about content (a sketch sheet's
+    signature came back as a fake signature in a result) and add the measured ink colour for drawings
+    (the reader said 'blue-gray' for a strong blue ballpoint)."""
+    if not text:
+        if info and info.get("kind") == "drawing":
+            return (f"a monochrome hand drawing in {info['colour']} ink on white paper, loose strokes and hatching, "
+                    "no colour fill, the background left as white paper")
+        return None
+    parts = re.split(r"(?<=[.;])\s+|,\s+(?=(?:and |with |the |emphasi))", text)
+    kept = [p.strip().rstrip(".;,") for p in parts if p.strip() and not CONTENT_WORDS.search(p)]
+    kept = [k[0].lower() + k[1:] if i and k[:1].isupper() and not k[:2].isupper() else k for i, k in enumerate(kept)]
+    out = "; ".join(kept) if kept else ""
+    # The measured ink colour only for line drawings: a marker sheet on paper also reads as 'drawing' and
+    # 'strong black ink' then pushed out its marker tones (laptop test).
+    sketchy = re.search(r"\b(sketch|pen|pencil|ink|ballpoint|line drawing)", out, re.I)
+    painterly = re.search(r"\b(marker|watercolou?r|paint|gouache|accent|colou?rful|vibrant)", out, re.I)
+    if info and info.get("kind") == "drawing" and sketchy and not painterly:
+        out = (out + ", " if out else "") + f"drawn in strong {info['colour']} ink like image 2 on white paper"
+    return out or None
+
+
+def style_prompt(params: dict, style: str | None = None, info: dict | None = None) -> str:
+    """Restyle image 1 with image 2's style. `style` is image 2's style in words (from the local vision model);
+    without it, a simple read of the reference (a monochrome drawing on paper and its ink) stands in.
+
+    Laptop tests: klein copies a style only loosely from the reference latent alone (a coloured photo with a
+    pencil filter); the style written out in words is what makes the transfer happen."""
     transfer = str(params.get("transfer", "full"))
     lead, aspect, kind = STYLE_ASPECTS.get(transfer, STYLE_ASPECTS["full"])
     desc = str(params.get("prompt", "")).strip().rstrip(".")
-    text = f"{lead}: {desc}, matching its {aspect}." if desc else f"{lead}: match its {aspect}."
-    text += (f" Image 2 is only a {kind} reference: none of its objects, vehicles, ground or landscape may appear."
-             " Keep image 1's object, exact shape, proportions, design details, its background content and"
-             " composition unchanged.")
+    if desc and GENERIC_STYLE.match(desc):
+        desc = ""
+    if not style:
+        style = clean_style_text(None, info)
+    if transfer == "full":
+        text = "Restyle image 1 completely in the visual style of image 2"
+        text += f". The style of image 2: {style}." if style else "."
+        text += (" Apply this medium, technique, line work, colour palette, shading, lighting and background treatment"
+                 " to all of image 1, so it no longer looks like the original medium.")
+    else:
+        text = f"{lead}"
+        text += f". The style of image 2: {style}. Take only its {aspect}." if style else f": match its {aspect}."
+    if desc:
+        text += f" {desc}."
+    text += (" Keep image 1's subject with its exact shape, proportions, design details, viewpoint and composition."
+             f" Image 2 is only a {kind} reference: none of its objects, vehicles, text or layout may appear.")
     return text
 
 
