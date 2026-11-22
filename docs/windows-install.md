@@ -47,7 +47,7 @@ The installer reads your GPU's memory and picks the model set:
 | | 8 GB mode | 12 GB mode (about 12 GB or more) |
 |---|---|---|
 | Create | Z-Image-Turbo GGUF Q5, Qwen3-4B Q4 text encoder | Z-Image-Turbo GGUF **Q8**, Qwen3-4B **Q8**: cleaner detail and text |
-| Edit, Render, New view, Erase, Extend, Style, Views, Environment | FLUX.2 klein 4B at about 1 MP | the same model at about **1.5 MP**: sharper results |
+| Edit, Render, New view, Erase, Extend, Style, Views, Environment | FLUX.2 klein 4B at about 1 MP | the same model at about **1.5 MP**: sharper Edit, Render, New view and Style (finer detail, legible logos); Erase, Extend and Environment look about the same |
 | Animate | Wan 2.2 5B GGUF Q4, 832x480 | Wan 2.2 5B GGUF **Q8**, **1280x704 (720p)** |
 
 Both modes use only commercially usable licences. The bigger models (Qwen-Image-Edit 20B, Wan 2.2 14B) need 24 GB or more and are not part of either mode. To force a mode, run the installer with `-Mode 8gb` or `-Mode gpu12`.
