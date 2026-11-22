@@ -344,3 +344,58 @@ def cover(image: Image.Image, size: tuple[int, int]) -> Image.Image:
     big = image.convert("RGB").resize((max(w, round(image.width * k)), max(h, round(image.height * k))), Image.LANCZOS)
     x, y = (big.width - w) // 2, (big.height - h) // 2
     return big.crop((x, y, x + w, y + h))
+
+
+INK_NAMES = [(0, "red"), (25, "orange-brown"), (50, "ochre"), (90, "green"), (170, "teal"), (200, "blue"),
+             (250, "violet"), (300, "magenta"), (345, "red")]
+
+
+def analyze_style(image: Image.Image) -> dict:
+    """Rough read of a style reference: is it a drawing on paper, and in what ink colour?
+
+    The edit model only sees image 2 through its latent; spelling the medium out in the prompt (and
+    preparing image 1 to match) is what makes a photo actually turn into, say, a blue ballpoint sketch."""
+    small = image.convert("RGB")
+    small.thumbnail((256, 256))
+    hsv = np.asarray(small.convert("HSV"), dtype=np.float32) / 255.0
+    h, s, v = hsv[..., 0] * 360, hsv[..., 1], hsv[..., 2]
+    paper = (v > 0.82) & (s < 0.12)
+    ink = ~paper & (v < 0.9)
+    paper_frac = float(paper.mean())
+    info: dict = {"kind": "color", "paper": paper_frac}
+    if paper_frac < 0.45 or ink.sum() < 50:
+        return info
+    sat = float(np.median(s[ink]))
+    rgb = np.asarray(small, dtype=np.float32)[ink]
+    dark = rgb[np.argsort(rgb.sum(axis=1))[: max(10, len(rgb) // 5)]]  # the strongest strokes
+    ink_rgb = tuple(int(c) for c in np.median(dark, axis=0))
+    hue_spread = 0.0
+    if sat >= 0.15:
+        ang = np.deg2rad(h[ink & (s >= 0.15)])
+        if ang.size:
+            hue_spread = float(1 - np.hypot(np.cos(ang).mean(), np.sin(ang).mean()))
+    if sat >= 0.15 and hue_spread > 0.25:
+        return info  # many colours on white: an illustration or marker render, not a monochrome drawing
+    if sat < 0.15:
+        colour = "graphite grey" if np.mean(ink_rgb) > 70 else "black"
+    else:
+        hue = float(np.rad2deg(np.arctan2(np.sin(np.deg2rad(h[ink & (s >= 0.15)])).mean(),
+                                          np.cos(np.deg2rad(h[ink & (s >= 0.15)])).mean())) % 360)
+        colour = next(name for lim, name in reversed(INK_NAMES) if hue >= lim)
+    info.update(kind="drawing", ink=ink_rgb, colour=colour)
+    return info
+
+
+def inkify(image: Image.Image, ink: tuple[int, int, int], paper: tuple[int, int, int] = (250, 250, 247)) -> Image.Image:
+    """Turn a photo into a rough monochrome line drawing in the given ink: edges as lines, a little tone as
+    hatching-like shading. Used as image 1 so the edit model redraws instead of keeping the photo."""
+    g = np.asarray(image.convert("L"), dtype=np.float32) / 255.0
+    scale = max(image.size) / 1024
+    im = Image.fromarray((g * 255).astype(np.uint8))
+    a = np.asarray(im.filter(ImageFilter.GaussianBlur(1.0 * scale)), dtype=np.float32) / 255.0
+    b = np.asarray(im.filter(ImageFilter.GaussianBlur(3.0 * scale)), dtype=np.float32) / 255.0
+    edges = np.clip(np.abs(a - b) * 9.0, 0, 1)
+    tone = np.clip((0.75 - g) / 0.75, 0, 1) * 0.35
+    d = np.clip(np.maximum(edges, tone), 0, 1)[..., None]
+    out = np.asarray(paper, dtype=np.float32) * (1 - d) + np.asarray(ink, dtype=np.float32) * d
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))

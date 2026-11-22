@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from ..workflows import MOTION_PROMPTS, STAGE_PROMPTS, preset_prompt
 
 VIEW_ELEVATION = {
@@ -106,6 +108,24 @@ STYLE_ASPECTS = {
     "rendering": ("Re-render image 1 with the rendering technique of image 2", "medium, line work, shading and rendering technique", "rendering"),
     "lighting_mood": ("Relight image 1 with the lighting and colour palette of image 2", "lighting, time of day, atmosphere and colour grading", "colour and light"),
 }
+
+
+GENERIC_STYLE = re.compile(r"^(render|restyle|redraw|make|turn|transfer|apply|use)?\s*(image ?1|it|this)?\s*(in|into|to|with)?\s*(the)?\s*(style|look)\s*(of)?\s*(image ?2|the reference|reference)?\.?$", re.I)
+
+
+def drawing_style_prompt(params: dict, info: dict) -> str:
+    """Image 2 is a monochrome drawing on paper (read by imaging.analyze_style)."""
+    what = str(params.get("what", "") or "").strip() or "subject"
+    desc = str(params.get("prompt", "")).strip().rstrip(".")
+    medium = f"loose hand-drawn {info['colour']} pen sketch on white paper"
+    text = (f"Redraw image 1 as a {medium}, in exactly the drawing style of image 2: the same {info['colour']} ink, "
+            "the same loose, confident strokes, construction lines and hatching, white paper showing through. "
+            "No colour fill, no photographic textures, no reflections rendered realistically. "
+            f"Keep image 1's {what}: its exact shape, proportions, design lines, viewpoint and composition. "
+            "Draw the surroundings only with a few light sketchy lines, fading out to white paper.")
+    if desc and not GENERIC_STYLE.match(desc):
+        text += f" {desc}."
+    return text + " Image 2 is only a style reference: do not copy its objects, vehicles or text."
 
 
 def style_prompt(params: dict) -> str:
