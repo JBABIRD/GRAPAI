@@ -141,12 +141,15 @@ class ComfyClient:
 
 
 def load_template(name: str, profile: str = "") -> dict:
-    """A profile folder (e.g. comfy_workflows/laptop/) overrides the default graph. A profile without its own
-    quality graph uses its fast one, so Quality mode never reaches for models the profile's machine lacks."""
+    """A profile folder (e.g. comfy_workflows/laptop/) overrides the default graph. `profile` may be a
+    comma-separated chain, most specific first ("gpu12,laptop": the 12 GB graphs, else the 8 GB ones).
+    A chain without its own quality graph uses its fast one, so Quality mode never reaches for models the
+    machine lacks."""
     root = Path(settings.comfy_workflows)
-    candidates = [root / profile / f"{name}.json"] if profile else []
-    if profile and name.endswith("_quality"):
-        candidates.append(root / profile / f"{name[:-len('_quality')]}_fast.json")
+    chain = [p.strip() for p in profile.split(",") if p.strip()]
+    candidates = [root / p / f"{name}.json" for p in chain]
+    if chain and name.endswith("_quality"):
+        candidates += [root / p / f"{name[:-len('_quality')]}_fast.json" for p in chain]
     for path in candidates + [root / f"{name}.json"]:
         if path.exists():
             return json.loads(path.read_text())
@@ -237,7 +240,7 @@ class ComfyEdit(ComfyProvider):
     def values(self, job: JobInput) -> dict[str, Any]:
         files = _upload_inputs(self.client, job, ["image", "ref1", "ref2"])
         n_refs = sum(1 for k in ("ref1", "ref2") if files.get(k))
-        return {"prompt": prompts.edit_prompt(job.params, n_refs), "negative": " ", **files, **_megapixel_size(job)}
+        return {"prompt": prompts.edit_prompt(job.params, n_refs), "negative": " ", **files, **_megapixel_size(job, float(self.template_meta.get("megapixels", 1.0)))}
 
     def run(self, job: JobInput) -> list[Output]:
         outs = self.run_images(job)
@@ -257,7 +260,7 @@ class ComfyRender(ComfyEdit):
     def values(self, job: JobInput) -> dict[str, Any]:
         files = _upload_inputs(self.client, job, ["image"])
         return {"prompt": prompts.render_prompt(job.params), "negative": " ", **files, "ref1": None, "ref2": None,
-                **_megapixel_size(job)}
+                **_megapixel_size(job, float(self.template_meta.get("megapixels", 1.0)))}
 
 
 class ComfyNewView(ComfyEdit):
@@ -266,7 +269,7 @@ class ComfyNewView(ComfyEdit):
     def values(self, job: JobInput) -> dict[str, Any]:
         files = _upload_inputs(self.client, job, ["image"])
         return {"prompt": prompts.new_view_prompt(job.params), "negative": " ", **files, "ref1": None, "ref2": None,
-                **_megapixel_size(job)}
+                **_megapixel_size(job, float(self.template_meta.get("megapixels", 1.0)))}
 
 
 class ComfyStyle(ComfyEdit):
@@ -277,7 +280,7 @@ class ComfyStyle(ComfyEdit):
     def values(self, job: JobInput) -> dict[str, Any]:
         files = _upload_inputs(self.client, job, ["image", "style"])
         return {"prompt": prompts.style_prompt(job.params), "negative": " ", "image": files["image"],
-                "ref1": files["style"], "ref2": None, **_megapixel_size(job)}
+                "ref1": files["style"], "ref2": None, **_megapixel_size(job, float(self.template_meta.get("megapixels", 1.0)))}
 
     def run(self, job: JobInput) -> list[Output]:
         return self.run_images(job)
@@ -298,7 +301,7 @@ class ComfyViews(ComfyEdit):
             job.progress(i / len(views), f"{prompts.VIEW_LABELS[view]} ({i + 1}/{len(views)})")
             graph = fill_template(template, {"prompt": prompts.view_prompt(job.params, view), "negative": " ",
                                              "image": files["image"], "ref1": None, "ref2": None, "seed": seed,
-                                             **_megapixel_size(job)})
+                                             **_megapixel_size(job, float(self.template_meta.get("megapixels", 1.0)))})
             for f in self.client.run(graph, lambda p, m="": job.progress((i + p) / len(views), m)):
                 if f["filename"].lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
                     img = Image.open(io.BytesIO(self.client.fetch(f)))

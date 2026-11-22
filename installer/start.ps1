@@ -4,7 +4,7 @@
 #>
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
-$GrapaiPort = 8000; $ComfyPort = 8188; $LowVram = 0
+$GrapaiPort = 8000; $ComfyPort = 8188; $LowVram = 0; $ComfyProfile = "laptop"
 $settings = Join-Path $Root "settings.ps1"
 if (Test-Path $settings) { . $settings }
 
@@ -53,7 +53,7 @@ try {
     Write-Host "Starting the GRAPAI server ..."
     $env:DUCTUS_PROVIDER = "comfy"
     $env:DUCTUS_COMFY_URL = "http://127.0.0.1:$ComfyPort"
-    $env:DUCTUS_COMFY_PROFILE = "laptop"
+    $env:DUCTUS_COMFY_PROFILE = $ComfyProfile
     $env:DUCTUS_DATA_DIR = Join-Path $Root "data"
     $env:DUCTUS_WEB_DIR = Join-Path $Root "app\frontend\dist"
     $env:HF_HUB_DISABLE_TELEMETRY = "1"

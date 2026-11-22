@@ -312,3 +312,12 @@ def test_profile_quality_falls_back_to_profile_fast():
     assert comfy.load_template("create_quality", "laptop") == fast
     assert comfy.load_template("inpaint_quality", "laptop") != comfy.load_template("inpaint_fast", "laptop")
     assert comfy.load_template("create_quality") != fast
+
+
+def test_profile_chain_prefers_gpu12_then_laptop():
+    assert comfy.load_template("create_fast", "gpu12,laptop")["1"]["inputs"]["unet_name"] == "z_image_turbo-Q8_0.gguf"
+    # klein Base quality graph exists in gpu12 at 1.5 MP; animate quality falls back to the gpu12 fast graph
+    assert comfy.load_template("inpaint_quality", "gpu12,laptop")["_meta"]["megapixels"] == 1.5
+    assert comfy.load_template("animate_quality", "gpu12,laptop")["_meta"]["video"]["long"] == 1280
+    # a graph only the laptop has still resolves through the chain, never to the big root graph
+    assert comfy.load_template("create_quality", "gpu12,laptop") == comfy.load_template("create_fast", "gpu12,laptop")

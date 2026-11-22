@@ -3,10 +3,10 @@
 ## What you need
 
 - Windows 10 (1803 or newer) or Windows 11, 64-bit
-- An NVIDIA GPU with **8 GB of VRAM or more** and a recent NVIDIA driver (570 or newer)
+- An NVIDIA GPU with **8 GB of VRAM or more** and a recent NVIDIA driver (570 or newer). With **12 GB or more**, the installer picks the 12 GB mode by itself (see below)
 - 16 GB of RAM (32 GB if you want to make videos)
-- About **45 GB of free disk space** (about 38 GB without video)
-- A good internet connection: the first install downloads about 33 GB
+- About **45 GB of free disk space** in 8 GB mode, about **55 GB** in 12 GB mode (less without video)
+- A good internet connection: the first install downloads about 34 GB (8 GB mode) or 42 GB (12 GB mode)
 
 You do **not** need admin rights, Python, Node.js or Git. Nothing is installed system-wide.
 
@@ -40,12 +40,24 @@ Shortcuts: `GRAPAI` on the Desktop, and a `GRAPAI` folder in the Start menu with
 
 The GRAPAI server runs in ComfyUI's own Python (it reuses ComfyUI's GPU build of PyTorch, which saves a 3 GB download). The installer pins ComfyUI to a tested version, so do not update ComfyUI from its own updater: run a newer GRAPAI installer instead.
 
+## 8 GB and 12 GB modes
+
+The installer reads your GPU's memory and picks the model set:
+
+| | 8 GB mode | 12 GB mode (about 12 GB or more) |
+|---|---|---|
+| Create | Z-Image-Turbo GGUF Q5, Qwen3-4B Q4 text encoder | Z-Image-Turbo GGUF **Q8**, Qwen3-4B **Q8**: cleaner detail and text |
+| Edit, Render, New view, Erase, Extend, Style, Views, Environment | FLUX.2 klein 4B at about 1 MP | the same model at about **1.5 MP**: sharper results |
+| Animate | Wan 2.2 5B GGUF Q4, 832x480 | Wan 2.2 5B GGUF **Q8**, **1280x704 (720p)** |
+
+Both modes use only commercially usable licences. The bigger models (Qwen-Image-Edit 20B, Wan 2.2 14B) need 24 GB or more and are not part of either mode. To force a mode, run the installer with `-Mode 8gb` or `-Mode gpu12`.
+
 ## Options
 
 Run the installer from a PowerShell window in the unpacked folder for these:
 
 ```powershell
-.\Install-GRAPAI.cmd -NoVideo                  # skip the video model (about 8 GB less)
+.\Install-GRAPAI.cmd -NoVideo                  # skip the video model (about 8 to 13 GB less)
 .\Install-GRAPAI.cmd -InstallDir D:\GRAPAI     # install on another drive
 .\Install-GRAPAI.cmd -SkipModels               # app only, copy the models in yourself
 ```

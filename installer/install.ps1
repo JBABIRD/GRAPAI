@@ -14,6 +14,8 @@
     -NoVideo             skip the local video model (about 8 GB less to download)
     -SkipModels          install the app only (models are copied in by hand)
     -NoShortcuts         do not create Desktop / Start menu shortcuts
+    -Mode <auto|8gb|gpu12>  model set: auto picks the 12 GB set (higher-precision models, sharper edits,
+                         720p video) on GPUs with about 12 GB or more, else the 8 GB set
     -Yes                 do not ask questions (accept warnings, do not start the app at the end)
 #>
 [CmdletBinding()]
@@ -22,6 +24,7 @@ param(
     [switch]$NoVideo,
     [switch]$SkipModels,
     [switch]$NoShortcuts,
+    [ValidateSet("auto", "8gb", "gpu12")][string]$Mode = "auto",
     [switch]$Yes
 )
 
@@ -151,7 +154,13 @@ try {
     Say "    RAM: $ramGb GB"
     if ($ramGb -lt 16) { Say "    16 GB of RAM or more is recommended; 32 GB for video." "Yellow" }
 
-    $models = @($Manifest.models | Where-Object { -not ($NoVideo -and $_.group -eq "video") })
+    $Tier = $Mode
+    if ($Tier -eq "auto") { $Tier = if ([double]$gpu[1] -ge $Manifest.vram_tiers.gpu12.min_mib) { "gpu12" } else { "8gb" } }
+    $ComfyProfile = $Manifest.vram_tiers.$Tier.profile
+    if ($Tier -eq "gpu12") { Say "    12 GB mode: higher-precision models, sharper edits (1.5 MP) and 720p video" "Green" }
+    else { Say "    8 GB mode" }
+
+    $models = @($Manifest.models | Where-Object { -not ($NoVideo -and $_.group -eq "video") -and (-not $_.tier -or $_.tier -eq $Tier) })
     $needGb = 12
     if (-not $SkipModels) { $needGb += [math]::Ceiling((($models | Measure-Object -Property size -Sum).Sum) / 1GB) }
     $drive = Get-PSDrive -Name ((Resolve-Path $InstallDir).Path.Substring(0, 1))
@@ -267,6 +276,10 @@ try {
 `$LowVram = 0
 "@ | Set-Content -Path $settingsFile
     }
+    # The model set follows the GPU, so the installer rewrites only this line.
+    $lines = @(Get-Content $settingsFile | Where-Object { $_ -notmatch '^\$ComfyProfile\s*=' })
+    $lines += "`$ComfyProfile = `"$ComfyProfile`"   # set by the installer: gpu12,laptop = 12 GB mode, laptop = 8 GB mode"
+    Set-Content -Path $settingsFile -Value $lines
     $GrapaiPort = 8000
     . $settingsFile
 
