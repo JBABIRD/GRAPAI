@@ -412,47 +412,81 @@ class ComfyErase(ComfyInpaint):
         return outs
 
 
-class ComfyOutpaint(ComfyInpaint):
-    """Outpaint: edge-extend the image onto the bigger canvas and inpaint the new area, overlapping the
-    original a little so the join is generated with its surroundings."""
+class ComfyOutpaint(ComfyProvider):
+    """Outpaint with the fal outpaint LoRA for FLUX.2 klein 4B (Apache-2.0): the image is placed on a pure
+    green canvas and klein is asked to fill the green. It was trained on 5-25% borders per side, so larger
+    extensions grow the canvas in several passes. The original pixels are pasted back exactly.
 
-    workflow, model = "outpaint", "FLUX.2 klein 4B (inpaint)"
+    Replaces the earlier inpaint recipe (blurred edge-pad + masked inpaint), which left soft smears instead
+    of continuing the scene (Janos's car under the bridge, 2026-11-22)."""
+
+    workflow, template_base, model = "outpaint", "outpaint", "FLUX.2 klein 4B + outpaint LoRA"
+    GREEN = (0, 255, 0)
+    MAX_FRAC = 0.25
 
     def run(self, job: JobInput) -> list[Output]:
         src = imaging.flatten(job.images["image"])
         left, top, right, bottom = imaging.outpaint_pads(job.params, src.size)
-        arr = np.pad(np.asarray(src), ((top, bottom), (left, right), (0, 0)), mode="edge")
-        canvas = Image.fromarray(arr)
         # Plain background (paper, studio sweep) and no scene asked for: continue it directly instead of
         # letting klein invent a scene (a white-paper car sketch came back as a sunset with reflections).
         bg = imaging.plain_border(src) if prompts.is_blank_prompt(job.params.get("prompt")) else None
         if bg is not None:
-            out = Image.new("RGB", canvas.size, bg)
+            out = Image.new("RGB", (src.width + left + right, src.height + top + bottom), bg)
             out.paste(src, (left, top))
             return [Output(image=out, meta={"seed": job.seed(), "note": "plain background continued, no AI"})]
-        # Heavily blur the stretched border (60 px at the ~1 MP working size) so klein doesn't copy its
-        # streaks; the original goes back unblurred. Tested on the laptop: no streaks or sky blocks.
-        mp = float(load_template(self.template_name(job), self.target(job)[1]).get("_meta", {}).get("megapixels", 1.0))
-        work_w = _size_for(canvas.size, mp)["width"]
-        scale = canvas.width / work_w
-        # Overlap into the original: 96 px at working size, but never more than 15% of the original's short
-        # side there. On a big extension the original is small at working size and a fixed 96 px overlap
-        # regenerated almost all of it (the subject came back faded).
-        ov = int(max(8, min(96, 0.15 * min(src.size) / scale)))
-        sharp = canvas
-        blurred = canvas.filter(ImageFilter.GaussianBlur(60 * scale))
-        hole = Image.new("L", canvas.size, 255)
-        hole.paste(0, (left, top, left + src.width, top + src.height))
-        # Fade the sharp original into the blurred border (erode ov/2, blur ov/3 at working size).
-        # A hard paste puts a rectangle into the start image and reference, and klein reproduced it.
-        alpha = ImageOps.invert(imaging.dilate(hole, int(ov / 2 * scale))).filter(ImageFilter.GaussianBlur(ov / 3 * scale))
-        canvas = Image.composite(sharp, blurred, alpha)
-        # Wide, soft join (overlap ov, blur ov/2 at working size): a narrow one left a visible box
-        # where the new sky's blue differed slightly from the original's.
-        outs = self.inpaint(job, canvas, hole, prompts.outpaint_prompt(job.params), grow=2 * ov + 1, blur=ov / 2)
-        # Reference = the padded canvas. Tested: the unpadded original as reference duplicated the
-        # subject or left a sky rectangle; the scene description is what fixes weak fills.
-        return [Output(image=o, meta={"seed": job.seed()}) for o in outs]
+        template = self.prepare(job)
+        mp = float(self.template_meta.get("megapixels", 1.0))
+        steps = outpaint_passes(src.size, (left, top, right, bottom), self.MAX_FRAC)
+        count, seed = int(job.params.get("count", 1) or 1), job.seed()
+        prompt = prompts.outpaint_lora_prompt(job.params)
+        outs: list[Output] = []
+        total = count * len(steps)
+        for i in range(count):
+            cur = src
+            for k, (l, t, r, b) in enumerate(steps):
+                done = i * len(steps) + k
+                job.progress(done / total, f"extending {k + 1}/{len(steps)}" + (f", result {i + 1}/{count}" if count > 1 else ""))
+                canvas = Image.new("RGB", (cur.width + l + r, cur.height + t + b), self.GREEN)
+                canvas.paste(cur, (l, t))
+                size = _size_for(canvas.size, mp)
+                name = self.client.upload_image(canvas.resize((size["width"], size["height"]), Image.LANCZOS), "image")
+                graph = fill_template(template, {"prompt": prompt, "negative": prompts.INPAINT_NEGATIVE, "image": name,
+                                                 "seed": seed + i * 100 + k, **size})
+                gen = None
+                for f in self.client.run(graph, lambda p, m="": job.progress((done + p) / total, m)):
+                    if f["filename"].lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                        gen = Image.open(io.BytesIO(self.client.fetch(f)))
+                        gen.load()
+                if gen is None:
+                    raise ComfyError("ComfyUI returned no image")
+                gen = gen.convert("RGB").resize(canvas.size, Image.LANCZOS)
+                # Keep the known pixels exact, with a short feather so the join follows the new content.
+                keep = Image.new("L", canvas.size, 0)
+                keep.paste(255, (l, t, l + cur.width, t + cur.height))
+                feather = max(2, int(0.006 * max(canvas.size)))
+                keep = ImageOps.invert(imaging.dilate(ImageOps.invert(keep), feather)).filter(ImageFilter.GaussianBlur(feather / 2))
+                cur = Image.composite(canvas, gen, keep)
+            final = cur.copy()
+            final.paste(src, (left, top))  # the original itself is never changed
+            outs.append(Output(image=final, meta={"seed": seed + i * 100, "passes": len(steps)}))
+        return outs
+
+
+def outpaint_passes(size: tuple[int, int], pads: tuple[int, int, int, int], max_frac: float) -> list[tuple[int, int, int, int]]:
+    """Split an extension into passes that each add at most max_frac of the current width/height per side."""
+    w, h = size
+    left, top, right, bottom = pads
+    steps: list[tuple[int, int, int, int]] = []
+    while left or top or right or bottom:
+        sx, sy = max(8, int(w * max_frac)), max(8, int(h * max_frac))
+        step = (min(left, sx), min(top, sy), min(right, sx), min(bottom, sy))
+        steps.append(step)
+        left, top, right, bottom = left - step[0], top - step[1], right - step[2], bottom - step[3]
+        w += step[0] + step[2]
+        h += step[1] + step[3]
+        if len(steps) > 12:
+            raise ValueError("That extension is too large: extend in smaller steps")
+    return steps
 
 
 class ComfyEnvSwap(ComfyInpaint):

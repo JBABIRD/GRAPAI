@@ -206,7 +206,10 @@ def test_outpaint_keeps_original_and_fills_new_area():
     up = srv.uploads["image"].size
     assert abs(up[0] / up[1] - 1000 / 700) < 0.03 and up[0] % 16 == 0 and up[1] % 16 == 0
     assert out.getpixel((20, 300))[2] > 200          # new area from the model
-    assert srv.graph["12"]["inputs"]["image"] == "image.png"  # reference = the padded canvas (tested best)
+    up_img = srv.uploads["image"]
+    assert up_img.getpixel((2, up_img.height // 2)) == (0, 255, 0)  # the LoRA's green canvas
+    assert "Fill the green spaces according to the image: a sandy beach." in json.dumps(srv.graph)
+    assert srv.graph["4"]["class_type"] == "LoraLoaderModelOnly"
     assert out.getpixel((600, 300)) == (255, 255, 255)  # original pixels back
 
 
@@ -305,3 +308,10 @@ def test_place_product_shrinks_onto_ground():
     assert (x1 - x0, y1 - y0) == (200, 300)
     assert abs((x0 + x1) / 2 - 500) <= 1 and abs(y1 - 720) <= 1
     assert product.getpixel((500, 600)) == (200, 30, 30)
+
+
+def test_outpaint_passes_stay_within_lora_training_range():
+    steps = comfy.outpaint_passes((1000, 600), (368, 256, 368, 112), 0.25)
+    assert len(steps) == 2 and steps[0] == (250, 150, 250, 112)
+    assert tuple(map(sum, zip(*steps))) == (368, 256, 368, 112)
+    assert comfy.outpaint_passes((800, 600), (200, 0, 0, 100), 0.25) == [(200, 0, 0, 100)]

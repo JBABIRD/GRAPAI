@@ -91,6 +91,15 @@ def outpaint_prompt(params: dict) -> str:
                    " Add no other drawings, sketches, posters, pictures or screens.")
 
 
+def outpaint_lora_prompt(params: dict) -> str:
+    """The fal outpaint LoRA's own instruction first; a scene description, if any, after it."""
+    base = "Fill the green spaces according to the image"
+    extra = str(params.get("prompt", "")).strip().rstrip(".")
+    if is_blank_prompt(extra) or extra.lower() in ("extend the image", "extend", "outpaint"):
+        return base + "."
+    return f"{base}: {extra}."
+
+
 STYLE_ASPECTS = {
     "full": ("Re-render image 1 with the look of image 2", "medium, line work, colours, materials, shading and lighting", "style"),
     "colours_materials": ("Re-render image 1 with the colours and materials of image 2", "colour palette, materials and surface finishes", "colour and material"),
