@@ -4,7 +4,7 @@
 #>
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
-$GrapaiPort = 8000; $ComfyPort = 8188; $LowVram = 0; $ComfyProfile = "laptop"
+$GrapaiPort = 8000; $ComfyPort = 8188; $LowVram = 0; $ComfyProfile = "laptop"; $UpdateBranch = ""
 $settings = Join-Path $Root "settings.ps1"
 if (Test-Path $settings) { . $settings }
 
@@ -73,6 +73,18 @@ try {
     Write-Host "GRAPAI is running at $url" -ForegroundColor Green
     Write-Host "Keep this window open while you work. Close it (or press Ctrl+C) to stop GRAPAI."
     Start-Process $url
+    # Quietly say when a newer version is on GitHub (never blocks the start).
+    try {
+        $vf = Join-Path $Root "version.txt"
+        $mf = Get-Content -Raw (Join-Path $Root "app\installer\manifest.json") | ConvertFrom-Json
+        $branch = if ($UpdateBranch) { $UpdateBranch } else { $mf.update.branch }
+        $latest = Invoke-RestMethod -UseBasicParsing -TimeoutSec 4 -Headers @{ "User-Agent" = "GRAPAI-updater" } `
+            -Uri "https://api.github.com/repos/$($mf.update.repo)/commits/$branch"
+        $have = if (Test-Path $vf) { (Get-Content -Raw $vf).Trim().Split(" ")[0] } else { "" }
+        if ($latest.sha -and $latest.sha -ne $have) {
+            Write-Host "An update is available. Close this window and run 'Update GRAPAI' from the Start menu." -ForegroundColor Yellow
+        }
+    } catch { }
     while ($true) {
         foreach ($p in $procs) {
             if ($p.HasExited) { Write-Host "A GRAPAI process stopped (exit $($p.ExitCode)). See $Logs" -ForegroundColor Red; Read-Host "Press Enter to close"; exit 1 }

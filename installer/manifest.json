@@ -1,5 +1,10 @@
 {
   "_comment": "Pinned downloads for install.ps1. Sizes and SHA-256 values were verified on the reference laptop install (2026-11-20). All models allow commercial use: Apache-2.0, except BiRefNet (MIT) and Real-ESRGAN (BSD-3).",
+  "update": {
+    "repo": "JBABIRD/GRAPAI",
+    "branch": "main",
+    "_comment": "Update GRAPAI downloads the newest commit of this branch. Change $UpdateBranch in settings.ps1 to follow another branch."
+  },
   "min_driver": 570,
   "comfyui": {
     "version": "v0.46.0",

@@ -16,6 +16,7 @@
     -NoShortcuts         do not create Desktop / Start menu shortcuts
     -Mode <auto|8gb|gpu12>  model set: auto picks the 12 GB set (higher-precision models, sharper edits,
                          720p video) on GPUs with about 12 GB or more, else the 8 GB set
+    Update later with the "Update GRAPAI" shortcut (Start menu), which runs Update-GRAPAI.ps1.
     -Yes                 do not ask questions (accept warnings, do not start the app at the end)
 #>
 [CmdletBinding()]
@@ -271,6 +272,7 @@ try {
     Step "Launcher and shortcuts"
     Copy-Item -Force (Join-Path $PSScriptRoot "start.ps1") (Join-Path $InstallDir "Start-GRAPAI.ps1")
     Copy-Item -Force (Join-Path $PSScriptRoot "uninstall.ps1") (Join-Path $InstallDir "Uninstall-GRAPAI.ps1")
+    Copy-Item -Force (Join-Path $PSScriptRoot "update.ps1") (Join-Path $InstallDir "Update-GRAPAI.ps1")
     $settingsFile = Join-Path $InstallDir "settings.ps1"
     if (-not (Test-Path $settingsFile)) {
         @"
@@ -280,6 +282,9 @@ try {
 # Set to 1 if ComfyUI runs out of GPU memory (slower, but needs less VRAM). 8 GB works without it.
 `$LowVram = 0
 "@ | Set-Content -Path $settingsFile
+    }
+    if (-not (Select-String -Path $settingsFile -Pattern '^\$UpdateBranch\s*=' -Quiet)) {
+        Add-Content -Path $settingsFile -Value "`$UpdateBranch = `"$($Manifest.update.branch)`"   # the GitHub branch Update GRAPAI follows"
     }
     # The model set follows the GPU, so the installer rewrites only this line.
     $lines = @(Get-Content $settingsFile | Where-Object { $_ -notmatch '^\$ComfyProfile\s*=' })
@@ -295,6 +300,7 @@ try {
         $targets = @(
             @{ Path = (Join-Path ([Environment]::GetFolderPath("Desktop")) "GRAPAI.lnk"); Script = "Start-GRAPAI.ps1"; Desc = "Start GRAPAI" },
             @{ Path = (Join-Path ([Environment]::GetFolderPath("Programs")) "GRAPAI\GRAPAI.lnk"); Script = "Start-GRAPAI.ps1"; Desc = "Start GRAPAI" },
+            @{ Path = (Join-Path ([Environment]::GetFolderPath("Programs")) "GRAPAI\Update GRAPAI.lnk"); Script = "Update-GRAPAI.ps1"; Desc = "Update GRAPAI to the latest version" },
             @{ Path = (Join-Path ([Environment]::GetFolderPath("Programs")) "GRAPAI\Uninstall GRAPAI.lnk"); Script = "Uninstall-GRAPAI.ps1"; Desc = "Remove GRAPAI" }
         )
         foreach ($t in $targets) {

@@ -36,7 +36,7 @@ Everything is in `%LOCALAPPDATA%\GRAPAI` (for example `C:\Users\you\AppData\Loca
 | `tools` | a portable Node.js, only used to build the web app |
 | `logs` | install and run logs, for when something goes wrong |
 
-Shortcuts: `GRAPAI` on the Desktop, and a `GRAPAI` folder in the Start menu with **Uninstall GRAPAI**.
+Shortcuts: `GRAPAI` on the Desktop, and a `GRAPAI` folder in the Start menu with **Update GRAPAI** and **Uninstall GRAPAI**.
 
 The GRAPAI server runs in ComfyUI's own Python (it reuses ComfyUI's GPU build of PyTorch, which saves a 3 GB download). The installer pins ComfyUI to a tested version, so do not update ComfyUI from its own updater: run a newer GRAPAI installer instead.
 
@@ -64,7 +64,13 @@ Run the installer from a PowerShell window in the unpacked folder for these:
 
 ## Update
 
-Download the newer GRAPAI zip, unpack it, and run `Install-GRAPAI.cmd` again. It updates the app, keeps your boards, and only downloads models that changed. Every model file is checked against its SHA-256 checksum, and your `settings.ps1` is kept. ComfyUI-GGUF is pinned to a Git commit instead, because GitHub's source zips have no fixed checksum.
+Click **Update GRAPAI** in the Start menu (GRAPAI folder). It checks GitHub for the newest version, stops GRAPAI if it is running, and installs the new version over the old one. No admin rights are needed. Your boards, `settings.ps1` and models stay; only models that are new or changed are downloaded, and every model is checked against its SHA-256 checksum. ComfyUI-GGUF is pinned to a Git commit instead, because GitHub's source zips have no fixed checksum.
+
+When GRAPAI starts, its window says when an update is available. The first update after installing from a zip always runs once, because the zip does not say which version it was.
+
+Updates follow the `main` branch. To follow another branch, change `$UpdateBranch` in `settings.ps1`.
+
+You can also run it from PowerShell: `& "$env:LOCALAPPDATA\GRAPAI\Update-GRAPAI.ps1"` (add `-Check` to only check, `-Force` to reinstall the same version).
 
 ## If something goes wrong
 
