@@ -310,7 +310,6 @@ def test_place_product_shrinks_onto_ground():
     assert product.getpixel((500, 600)) == (200, 30, 30)
 
 
-<<<<<<< HEAD
 def test_profile_quality_falls_back_to_profile_fast():
     fast = comfy.load_template("create_fast", "laptop")
     assert comfy.load_template("create_quality", "laptop") == fast
@@ -325,10 +324,10 @@ def test_profile_chain_prefers_gpu12_then_laptop():
     assert comfy.load_template("animate_quality", "gpu12,laptop")["_meta"]["video"]["long"] == 1280
     # a graph only the laptop has still resolves through the chain, never to the big root graph
     assert comfy.load_template("create_quality", "gpu12,laptop") == comfy.load_template("create_fast", "gpu12,laptop")
-=======
+
+
 def test_outpaint_passes_stay_within_lora_training_range():
     steps = comfy.outpaint_passes((1000, 600), (368, 256, 368, 112), 0.25)
     assert len(steps) == 2 and steps[0] == (250, 150, 250, 112)
     assert tuple(map(sum, zip(*steps))) == (368, 256, 368, 112)
     assert comfy.outpaint_passes((800, 600), (200, 0, 0, 100), 0.25) == [(200, 0, 0, 100)]
->>>>>>> phase-1-board

@@ -107,6 +107,14 @@
       "sha256": "868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3"
     },
     {
+      "group": "image",
+      "folder": "loras",
+      "file": "flux-2-klein-4b-outpaint-lora.safetensors",
+      "url": "https://huggingface.co/fal/flux-2-klein-4B-outpaint-lora/resolve/b11770ac6a3cf9325dcf81742c12b1c4e257880f/LyNiaZ53Tudg0J6sT8Xbx_pytorch_lora_weights_comfy_converted.safetensors",
+      "size": 76038936,
+      "sha256": "b8a5142b40f2e24aa1f5cfd0710323188836f49ea70b15b5f85b1e364316bc5b"
+    },
+    {
       "group": "video",
       "folder": "unet",
       "file": "Wan2.2-TI2V-5B-Q4_K_M.gguf",

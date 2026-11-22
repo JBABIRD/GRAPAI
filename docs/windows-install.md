@@ -82,5 +82,6 @@ All models allow commercial use (Apache-2.0; BiRefNet is MIT, Real-ESRGAN is BSD
 | Create | Z-Image-Turbo (GGUF Q5) |
 | Render, Edit, New view, Erase, Extend, Style, Views, Environment | FLUX.2 klein 4B (fp8); Quality mode for Erase and Extend uses klein Base 4B |
 | Animate | Wan 2.2 TI2V 5B (GGUF Q4) |
+| Extend (outpaint) | FLUX.2 klein 4B with the fal outpaint LoRA (Apache-2.0) |
 | Cut out | BiRefNet |
 | Upscale | Real-ESRGAN x4plus |
