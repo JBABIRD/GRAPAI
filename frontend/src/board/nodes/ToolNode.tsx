@@ -1,4 +1,4 @@
-import { Handle, Position, useEdges, type NodeProps } from "@xyflow/react";
+import { Handle, Position, useEdges, useStore, type NodeProps } from "@xyflow/react";
 import { memo, useMemo } from "react";
 import type { ParamSpec, ToolNodeT } from "../../types";
 import { useBoard } from "../BoardContext";
@@ -41,6 +41,18 @@ function ToolNode({ id, data, selected }: NodeProps<ToolNodeT>) {
     () => new Set(edges.filter((e) => e.target === id).map((e) => e.targetHandle)),
     [edges, id],
   );
+  // Inputs wired to an empty image node (made by dragging out of an input) still need an image.
+  const emptyKey = useStore((s) =>
+    edges
+      .filter((e) => e.target === id)
+      .filter((e) => {
+        const n = s.nodeLookup.get(e.source);
+        return n?.type === "image" && !(n.data as { url?: string }).url;
+      })
+      .map((e) => e.targetHandle)
+      .join("|"),
+  );
+  const emptyInputs = new Set(emptyKey ? emptyKey.split("|") : []);
   if (!wf) return <div className="tool-item">Unknown tool {data.workflow}</div>;
 
   const set = (name: string, value: unknown) => updateNodeData(id, { params: { ...data.params, [name]: value } });
@@ -178,7 +190,9 @@ function ToolNode({ id, data, selected }: NodeProps<ToolNodeT>) {
               <div key={i.name} className={`tool-input${connected.has(i.name) ? " connected" : ""}`}>
                 <Handle type="target" position={Position.Left} id={i.name} className="handle-tool-in" />
                 <span>{i.label}</span>
-                <em>{connected.has(i.name) ? "connected" : i.required ? "connect an image" : "optional"}</em>
+                <em className={emptyInputs.has(i.name) ? "needs-image" : undefined}>
+                  {emptyInputs.has(i.name) ? "add an image" : connected.has(i.name) ? "connected" : i.required ? "connect an image" : "optional"}
+                </em>
               </div>
             ))}
         </div>

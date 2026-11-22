@@ -15,6 +15,8 @@ export type BoardActions = {
   saveVideoFrame: (nodeId: string, time: number) => void;
   clearMask: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
+  fillImage: (nodeId: string, file: File) => void;
+  sketchInto: (nodeId: string) => void;
 };
 
 export const BoardContext = createContext<BoardActions | null>(null);

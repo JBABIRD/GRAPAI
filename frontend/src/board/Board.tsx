@@ -274,6 +274,7 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
         if (!src || !e.targetHandle) continue;
         if (!IMAGE_INPUT_NODES.has(src.type ?? "")) continue;
         const d = (src as ImageNodeT).data;
+        if (!d.assetId) continue;
         inputs[e.targetHandle] = d.assetId;
         if (e.targetHandle === "image" && d.maskAssetId && wf.inputs.some((i) => i.name === "mask")) inputs.mask = d.maskAssetId;
       }
@@ -283,7 +284,7 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
         return;
       }
       if (missing.length) {
-        updateNodeData(toolId, { status: "error", error: `Connect an image to ${missing.map((m) => m.label).join(", ")}` });
+        updateNodeData(toolId, { status: "error", error: `Add an image to ${missing.map((m) => m.label).join(", ")}` });
         return;
       }
       updateNodeData(toolId, { status: "running", progress: 0, message: "queued", error: null });
@@ -425,9 +426,55 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
 
   const deleteNode = useCallback((nodeId: string) => rf.deleteElements({ nodes: [{ id: nodeId }] }), [rf]);
 
+  // ---------- empty input nodes (made by dragging out of a tool input) ----------
+  const fillNode = useCallback(
+    (nodeId: string, asset: Asset, extra: Partial<ImageNodeT["data"]> = {}) => {
+      const size = fitSize(asset.width ?? 1024, asset.height ?? 1024);
+      setNodes((ns) =>
+        ns.map((n) => {
+          if (n.id !== nodeId || n.type !== "image") return n;
+          // Keep the right edge (where the wire leaves) in place as the node takes the image's shape.
+          const oldW = n.width ?? IMAGE_W;
+          return {
+            ...n,
+            position: { x: n.position.x + oldW - size.width, y: n.position.y },
+            width: size.width,
+            height: size.height,
+            data: { ...n.data, assetId: asset.id, url: asset.url, width: asset.width ?? 1024, height: asset.height ?? 1024, ...extra },
+          } as BoardNode;
+        }),
+      );
+    },
+    [setNodes],
+  );
+
+  const fillImage = useCallback(
+    async (nodeId: string, file: File) => {
+      if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+        flash(`${file.name}: use a PNG, JPEG or WebP image`);
+        return;
+      }
+      try {
+        const asset = await api.upload(file, file.name);
+        fillNode(nodeId, asset, { title: file.name.replace(/\.\w+$/, "") });
+      } catch (e) {
+        flash(`Upload failed: ${(e as Error).message}`);
+      }
+    },
+    [fillNode, flash],
+  );
+
+  const sketchInto = useCallback((nodeId: string) => {
+    setEditor({ nodeId, url: null, maskUrl: null, width: 1280, height: 896 });
+  }, []);
+
   const openEditor = useCallback((nodeId: string) => {
     const n = nodesRef.current.find((x) => x.id === nodeId) as ImageNodeT | undefined;
     if (!n || n.type !== "image") return;
+    if (!n.data.url) {
+      setEditor({ nodeId, url: null, maskUrl: null, width: 1280, height: 896 });
+      return;
+    }
     setEditor({ nodeId, url: n.data.url, maskUrl: n.data.maskUrl ?? null, width: n.data.width, height: n.data.height });
   }, []);
 
@@ -448,7 +495,10 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
         else if (res.mask) mask = await api.upload(res.mask, "mask.png");
         const maskPatch =
           mask === undefined ? {} : { maskAssetId: mask ? mask.id : null, maskUrl: mask ? mask.url : null };
-        if (target.nodeId) {
+        if (target.nodeId && !target.url) {
+          // A sketch drawn into an empty input node.
+          fillNode(target.nodeId, asset, { sketch: true, title: "Sketch", ...maskPatch });
+        } else if (target.nodeId) {
           updateNodeData(target.nodeId, { assetId: asset.id, url: asset.url, width: asset.width, height: asset.height, ...maskPatch });
           if (target.then === "erase") {
             const nodeId = target.nodeId;
@@ -514,8 +564,10 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
       saveVideoFrame,
       clearMask,
       deleteNode,
+      fillImage,
+      sketchInto,
     }),
-    [catalogue, workflows, runTool, updateNodeData, openEditor, quickAction, compareWith, eraseObject, outpaint, saveVideoFrame, clearMask, deleteNode],
+    [catalogue, workflows, runTool, updateNodeData, openEditor, quickAction, compareWith, eraseObject, outpaint, saveVideoFrame, clearMask, deleteNode, fillImage, sketchInto],
   );
 
   // ---------- connections ----------
@@ -539,9 +591,35 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
   const [picker, setPicker] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number }; source: string } | null>(null);
   const onConnectEnd: OnConnectEnd = useCallback(
     (event, state) => {
-      if (state.isValid || state.toNode || !state.fromNode || state.fromNode.type !== "image") return;
-      if (state.fromHandle?.type !== "source") return;
+      if (state.isValid || state.toNode || !state.fromNode) return;
       const pt = "changedTouches" in event ? event.changedTouches[0] : (event as MouseEvent);
+      // Out of a tool or compare input: an empty image node for that input appears where the wire was dropped.
+      if (state.fromHandle?.type === "target" && (state.fromNode.type === "tool" || state.fromNode.type === "compare") && state.fromHandle.id) {
+        const handle = state.fromHandle.id;
+        const at = rf.screenToFlowPosition({ x: pt.clientX, y: pt.clientY });
+        let title = handle === "before" ? "Before" : handle === "after" ? "After" : "Image";
+        if (state.fromNode.type === "tool") {
+          const wf = workflows.get((state.fromNode.data as ToolNodeT["data"]).workflow);
+          title = wf?.inputs.find((i) => i.name === handle)?.label ?? title;
+        }
+        const w = 240, h = 170;
+        const node: ImageNodeT = {
+          id: uid("img"),
+          type: "image",
+          position: { x: at.x - w, y: at.y - h / 2 },
+          width: w,
+          height: h,
+          selected: true,
+          data: { assetId: "", url: "", width: 0, height: 0, title },
+        };
+        setNodes((ns) => [...ns.map((n) => ({ ...n, selected: false })), node]);
+        setEdges((es) => [
+          ...es.filter((e) => !(e.target === state.fromNode!.id && e.targetHandle === handle)),
+          { id: uid("e"), source: node.id, sourceHandle: "out", target: state.fromNode!.id, targetHandle: handle },
+        ]);
+        return;
+      }
+      if (state.fromNode.type !== "image" || state.fromHandle?.type !== "source") return;
       const box = (document.querySelector(".board") as HTMLElement | null)?.getBoundingClientRect();
       setPicker({
         screen: { x: pt.clientX - (box?.left ?? 0), y: pt.clientY - (box?.top ?? 0) },
@@ -549,7 +627,7 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
         source: state.fromNode.id,
       });
     },
-    [rf],
+    [rf, setEdges, setNodes, workflows],
   );
   const pickTool = useCallback(
     (workflow: string) => {
@@ -622,6 +700,12 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
     const onPaste = (e: ClipboardEvent) => {
       if ((e.target as HTMLElement)?.closest("input, textarea")) return;
       const files = Array.from(e.clipboardData?.files ?? []);
+      const emptySel = nodesRef.current.find((n) => n.selected && n.type === "image" && !n.data.url);
+      if (files.length && emptySel) {
+        e.preventDefault();
+        fillImage(emptySel.id, files[0]);
+        return;
+      }
       if (files.length) {
         e.preventDefault();
         addAssets(files, centre());
@@ -643,7 +727,7 @@ export default function Board({ doc, catalogue, onSaveState }: Props) {
       window.removeEventListener("paste", onPaste);
       window.removeEventListener("keydown", onKey);
     };
-  }, [addAssets, addNote, addSection, centre, editor, newSketch, quickAction, rf]);
+  }, [addAssets, addNote, addSection, centre, editor, fillImage, newSketch, quickAction, rf]);
 
   // ---------- autosave ----------
   const first = useRef(true);
