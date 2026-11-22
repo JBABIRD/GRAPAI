@@ -250,3 +250,13 @@ input[type="range"] { padding: 0; accent-color: var(--accent); background: trans
 .outpaint-bar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 3px; }
 .outpaint-bar .outpaint-prompt { width: 300px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
   padding: 4px 8px; color: inherit; font: inherit; margin-right: 3px; }
+
+/* Empty input node (dragged out of a tool input) */
+.image-item.empty-input { background: var(--panel); border: 1.5px dashed #4b5160; display: flex; align-items: center; justify-content: center; }
+.image-item.empty-input.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+.react-flow__node.selected .image-item.empty-input { border-color: var(--accent); }
+.empty-input-body { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px; text-align: center; }
+.empty-input-body strong { font-size: 13px; }
+.empty-input-body span { color: var(--muted); font-size: 11px; }
+.empty-input-actions { display: flex; gap: 6px; margin-top: 4px; }
+.tool-input em.needs-image { color: var(--accent); }

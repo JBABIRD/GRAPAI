@@ -6,9 +6,58 @@ import { useBoard } from "../BoardContext";
 import OutpaintFrame, { type Pads } from "./OutpaintFrame";
 
 function ImageNode({ id, data, selected }: NodeProps<ImageNodeT>) {
-  const { openEditor, quickAction, clearMask, compareWith, eraseObject, outpaint } = useBoard();
+  const { openEditor, quickAction, clearMask, compareWith, eraseObject, outpaint, fillImage, sketchInto } = useBoard();
   const [extend, setExtend] = useState<Pads | null>(null);
+  const [over, setOver] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  if (!data.url) {
+    // Empty input node: made by dragging a wire out of a tool input onto the board.
+    return (
+      <div
+        className={`item image-item empty-input${over ? " over" : ""}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOver(false);
+          const f = e.dataTransfer.files[0];
+          if (f) fillImage(id, f);
+        }}
+      >
+        <Handle type="target" position={Position.Left} id="in" className="handle-in" isConnectable={false} />
+        <div className="empty-input-body">
+          <strong>{data.title ?? "Image"}</strong>
+          <span>Drop or paste an image</span>
+          <div className="empty-input-actions">
+            <button className="nodrag primary" onClick={() => fileRef.current?.click()}>
+              Upload
+            </button>
+            <button className="nodrag" onClick={() => sketchInto(id)}>
+              Sketch
+            </button>
+          </div>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) fillImage(id, f);
+            e.target.value = "";
+          }}
+        />
+        <Handle type="source" position={Position.Right} id="out" className="handle-out" title="Drag to a tool input" />
+      </div>
+    );
+  }
   const startExtend = () => {
     const side = Math.round(data.width * 0.25 / 8) * 8;
     setExtend({ left: side, top: 0, right: side, bottom: 0 });
