@@ -1,0 +1,40 @@
+[project]
+name = "ductus"
+version = "0.1.0"
+description = "Ductus API: open-model AI design studio backend"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "python-multipart>=0.0.9",
+  "pillow>=10",
+  "numpy>=1.26",
+  "imageio>=2.34",
+  "imageio-ffmpeg>=0.5",
+  "httpx>=0.27",
+  "pydantic>=2",
+]
+
+[project.optional-dependencies]
+# In-process models (background removal, upscaling). Install with: pip install -e ".[local]"
+local = [
+  "torch>=2.4",
+  "torchvision",
+  "transformers>=4.51",
+  "spandrel>=0.4",
+  "einops",
+  "kornia",
+  "timm",
+]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["ductus*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
