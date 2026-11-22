@@ -335,5 +335,7 @@ def test_style_with_a_drawing_reference_redraws_in_its_ink():
                    params={"mode": "fast", "count": 1, "seed": 1, "transfer": "full", "prompt": "render image 1 in the style of image 2"}))
     text = json.dumps(srv.graph)
     assert "blue pen sketch on white paper" in text and "render image 1 in the style" not in text
-    start = srv.uploads["image"]
-    assert start.getpixel((20, 20))[0] > 200  # image 1 went up as ink on paper, not the green photo
+    assert srv.uploads["image"].getpixel((20, 20)) == (90, 110, 70)  # no ink pre-pass by default
+    p.run(JobInput(images={"image": photo, "style": sketch},
+                   params={"mode": "fast", "count": 1, "seed": 1, "transfer": "full", "prep": True}))
+    assert srv.uploads["image"].getpixel((20, 20))[0] > 200  # with prep, image 1 goes up as ink on paper

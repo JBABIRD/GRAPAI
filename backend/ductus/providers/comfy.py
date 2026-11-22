@@ -274,10 +274,11 @@ class ComfyStyle(ComfyEdit):
         info = imaging.analyze_style(job.images["style"])
         transfer = str(job.params.get("transfer", "full"))
         if info["kind"] == "drawing" and transfer in ("full", "rendering"):
-            # A drawing on paper as the style: spell the medium out and hand the model a rough ink version of
-            # image 1, otherwise klein keeps the photo and only adds a pencil filter (Janos, 2026-11-22).
+            # A drawing on paper as the style: spell the medium out, otherwise klein keeps the photo and only adds
+            # a pencil filter (Janos, 2026-11-22). Laptop test: the spelled-out medium alone gives a real blue
+            # ballpoint drawing; the optional ink pre-pass (prep=true) added nothing, so it is off by default.
             src = imaging.flatten(job.images["image"])
-            start = imaging.inkify(src, info["ink"]) if job.params.get("prep", True) not in (False, "off", 0) else src
+            start = imaging.inkify(src, info["ink"]) if job.params.get("prep", False) in (True, "on", 1) else src
             image = self.client.upload_image(start, "image")
             style = self.client.upload_image(imaging.flatten(job.images["style"]), "style")
             prompt = prompts.drawing_style_prompt(job.params, info)
