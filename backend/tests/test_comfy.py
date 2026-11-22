@@ -352,3 +352,13 @@ def test_style_uses_the_reference_description(monkeypatch):
     text = json.dumps(srv.graph)
     assert "The style of image 2: thick impasto oil paint" in text and "exact shape, proportions" in text
     assert outs[0].meta["style"].startswith("thick impasto")
+
+
+def test_clean_style_text_drops_content_and_adds_ink():
+    from ductus.providers import prompts
+    t = ("A clean, minimalist sketch with a monochromatic blue-gray palette, using fine pencil lines. "
+         "The background is stark white, emphasizing the car's form and the design team's signature.")
+    out = prompts.clean_style_text(t, {"kind": "drawing", "colour": "blue"})
+    assert "signature" not in out and "car" not in out and "blue-gray palette" in out
+    assert out.endswith("drawn in strong blue ink like image 2 on white paper")
+    assert prompts.clean_style_text(None, {"kind": "color"}) is None

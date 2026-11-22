@@ -113,6 +113,27 @@ STYLE_ASPECTS = {
 GENERIC_STYLE = re.compile(r"^(render|restyle|redraw|make|turn|transfer|apply|use)?\s*(image ?1|it|this)?\s*(in|into|to|with)?\s*(the)?\s*(style|look)\s*(of)?\s*(image ?2|the reference|reference)?\.?$", re.I)
 
 
+CONTENT_WORDS = re.compile(r"\b(signature|signed|text|lettering|logo|brand|label|caption|title|design team|company|"
+                           r"car|cars|vehicle|vehicles|person|people|figure|harbou?r|boat|shoe|sneaker|building)s?\b", re.I)
+
+
+def clean_style_text(text: str | None, info: dict | None = None) -> str | None:
+    """Keep only the style in the reader's answer: drop sentences or clauses about content (a sketch sheet's
+    signature came back as a fake signature in a result) and add the measured ink colour for drawings
+    (the reader said 'blue-gray' for a strong blue ballpoint)."""
+    if not text:
+        if info and info.get("kind") == "drawing":
+            return (f"a monochrome hand drawing in {info['colour']} ink on white paper, loose strokes and hatching, "
+                    "no colour fill, the background left as white paper")
+        return None
+    parts = re.split(r"(?<=[.;])\s+|,\s+(?=(?:and |with |the |emphasi))", text)
+    kept = [p.strip().rstrip(".;,") for p in parts if p.strip() and not CONTENT_WORDS.search(p)]
+    out = ", ".join(kept) if kept else ""
+    if info and info.get("kind") == "drawing":
+        out = (out + ", " if out else "") + f"drawn in strong {info['colour']} ink like image 2 on white paper"
+    return out or None
+
+
 def style_prompt(params: dict, style: str | None = None, info: dict | None = None) -> str:
     """Restyle image 1 with image 2's style. `style` is image 2's style in words (from the local vision model);
     without it, a simple read of the reference (a monochrome drawing on paper and its ink) stands in.
@@ -124,9 +145,8 @@ def style_prompt(params: dict, style: str | None = None, info: dict | None = Non
     desc = str(params.get("prompt", "")).strip().rstrip(".")
     if desc and GENERIC_STYLE.match(desc):
         desc = ""
-    if not style and info and info.get("kind") == "drawing":
-        style = (f"a monochrome hand drawing in {info['colour']} ink on white paper, loose strokes and hatching, "
-                 "no colour fill, the background left as white paper")
+    if not style:
+        style = clean_style_text(None, info)
     if transfer == "full":
         text = "Restyle image 1 completely in the visual style of image 2"
         text += f". The style of image 2: {style}." if style else "."

@@ -136,6 +136,18 @@ _style_cache: dict[str, str] = {}
 _style_model: dict = {}
 
 
+def _style_key(image: Image.Image) -> tuple[str, Image.Image]:
+    import hashlib
+
+    small = image.convert("RGB")
+    small.thumbnail((768, 768))
+    return hashlib.sha1(small.tobytes()).hexdigest(), small
+
+
+def style_is_cached(image: Image.Image) -> bool:
+    return _style_key(image)[0] in _style_cache
+
+
 def describe_style(image: Image.Image) -> str | None:
     """Write the style of a reference image in words with a small local vision-language model
     (settings.style_vlm, e.g. Qwen3-VL-2B-Instruct, Apache-2.0). Returns None when none is configured.
@@ -144,11 +156,7 @@ def describe_style(image: Image.Image) -> str | None:
     moved off the GPU after each answer. Answers are cached per image."""
     if not settings.style_vlm:
         return None
-    import hashlib
-
-    small = image.convert("RGB")
-    small.thumbnail((768, 768))
-    key = hashlib.sha1(small.tobytes()).hexdigest()
+    key, small = _style_key(image)
     if key in _style_cache:
         return _style_cache[key]
     with _style_lock:
@@ -162,7 +170,7 @@ def describe_style(image: Image.Image) -> str | None:
         dev = torch.device("cpu")
         if torch.cuda.is_available() and settings.device.startswith("cuda"):
             free, _ = torch.cuda.mem_get_info()
-            if free > 6 * 1024**3:
+            if free > 5 * 1024**3:
                 dev = torch.device(settings.device)
         model.to(dev, dtype=torch.bfloat16 if dev.type == "cuda" else torch.float32)
         try:

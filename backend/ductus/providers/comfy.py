@@ -133,6 +133,13 @@ class ComfyClient:
             progress(min(0.9, (time.time() - started) / 120), "generating")
             time.sleep(1.0)
 
+    def free(self) -> None:
+        """Ask ComfyUI to unload its models, so an in-process model can use the GPU for a moment."""
+        try:
+            httpx.post(f"{self.base_url}/free", json={"unload_models": True, "free_memory": True}, timeout=30)
+        except httpx.HTTPError:
+            pass
+
     def fetch(self, file: dict) -> bytes:
         params = {"filename": file["filename"], "subfolder": file.get("subfolder", ""), "type": file.get("type", "output")}
         r = httpx.get(f"{self.base_url}/view", params=params, timeout=300)
@@ -274,12 +281,19 @@ class ComfyStyle(ComfyEdit):
         # Read the reference's style first (in words), then let klein apply it to image 1.
         self.style_text: str | None = None
         try:
-            from .local import describe_style
+            from .local import describe_style, style_is_cached
 
+            if settings.style_vlm and not style_is_cached(job.images["style"]):
+                # Laptop test: with klein loaded the reader fell back to the CPU (~30 s); freed, it takes a few
+                # seconds on the GPU and klein reloads quickly.
+                job.progress(0.02, "reading the reference's style")
+                if hasattr(self.client, "free"):
+                    self.client.free()
             self.style_text = describe_style(job.images["style"])
         except Exception as exc:  # pragma: no cover - the transfer still works without the description
             job.progress(0.0, f"style reader unavailable ({exc.__class__.__name__})")
         info = imaging.analyze_style(job.images["style"])
+        self.style_text = prompts.clean_style_text(self.style_text, info)
         src = imaging.flatten(job.images["image"])
         start = imaging.inkify(src, info["ink"]) if info["kind"] == "drawing" and job.params.get("prep", False) in (True, "on", 1) else src
         image = self.client.upload_image(start, "image")
