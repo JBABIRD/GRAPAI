@@ -271,9 +271,21 @@ class ComfyStyle(ComfyEdit):
     workflow, template_base, model = "style", "edit", "FLUX.2 klein 4B / Qwen-Image-Edit-2511"
 
     def values(self, job: JobInput) -> dict[str, Any]:
-        files = _upload_inputs(self.client, job, ["image", "style"])
-        return {"prompt": prompts.style_prompt(job.params), "negative": " ", "image": files["image"],
-                "ref1": files["style"], "ref2": None, **_megapixel_size(job)}
+        info = imaging.analyze_style(job.images["style"])
+        transfer = str(job.params.get("transfer", "full"))
+        if info["kind"] == "drawing" and transfer in ("full", "rendering"):
+            # A drawing on paper as the style: spell the medium out and hand the model a rough ink version of
+            # image 1, otherwise klein keeps the photo and only adds a pencil filter (Janos, 2026-11-22).
+            src = imaging.flatten(job.images["image"])
+            start = imaging.inkify(src, info["ink"]) if job.params.get("prep", True) not in (False, "off", 0) else src
+            image = self.client.upload_image(start, "image")
+            style = self.client.upload_image(imaging.flatten(job.images["style"]), "style")
+            prompt = prompts.drawing_style_prompt(job.params, info)
+        else:
+            files = _upload_inputs(self.client, job, ["image", "style"])
+            image, style, prompt = files["image"], files["style"], prompts.style_prompt(job.params)
+        return {"prompt": prompt, "negative": " ", "image": image, "ref1": style, "ref2": None,
+                **_megapixel_size(job, float(self.template_meta.get("megapixels", 1.0)))}
 
     def run(self, job: JobInput) -> list[Output]:
         return self.run_images(job)

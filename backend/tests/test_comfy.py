@@ -315,3 +315,25 @@ def test_outpaint_passes_stay_within_lora_training_range():
     assert len(steps) == 2 and steps[0] == (250, 150, 250, 112)
     assert tuple(map(sum, zip(*steps))) == (368, 256, 368, 112)
     assert comfy.outpaint_passes((800, 600), (200, 0, 0, 100), 0.25) == [(200, 0, 0, 100)]
+
+
+def test_style_with_a_drawing_reference_redraws_in_its_ink():
+    from ductus.providers import imaging
+    sketch = Image.new("RGB", (600, 400), (250, 250, 248))
+    d = ImageDraw.Draw(sketch)
+    for i in range(12):
+        d.line((60 + 30 * i, 300, 200 + 25 * i, 90), fill=(40, 60, 140), width=3)
+    info = imaging.analyze_style(sketch)
+    assert info["kind"] == "drawing" and info["colour"] == "blue"
+    photo = Image.new("RGB", (800, 500), (90, 110, 70))
+    ImageDraw.Draw(photo).rectangle((200, 150, 600, 380), fill=(230, 230, 230))
+    assert imaging.analyze_style(photo)["kind"] == "color"
+    srv = _BlueServer()
+    p = comfy.ComfyStyle()
+    p.client = srv
+    p.run(JobInput(images={"image": photo, "style": sketch},
+                   params={"mode": "fast", "count": 1, "seed": 1, "transfer": "full", "prompt": "render image 1 in the style of image 2"}))
+    text = json.dumps(srv.graph)
+    assert "blue pen sketch on white paper" in text and "render image 1 in the style" not in text
+    start = srv.uploads["image"]
+    assert start.getpixel((20, 20))[0] > 200  # image 1 went up as ink on paper, not the green photo
