@@ -1,0 +1,307 @@
+{
+  "_meta": {
+    "title": "Erase / outpaint quality (12 GB)",
+    "model": "FLUX.2 klein Base 4B (Apache-2.0), undistilled: 16 steps, CFG 3 (laptop sweep: same as 24/4, ~30% faster)",
+    "files": {
+      "diffusion_models": "flux-2-klein-base-4b-fp8.safetensors",
+      "text_encoders": "qwen_3_4b.safetensors",
+      "vae": "flux2-vae.safetensors"
+    },
+    "note": "True inpainting with the image as reference: VAEEncode -> SetLatentNoiseMask, DifferentialDiffusion for a soft edge, ReferenceLatent keeps the scene consistent, ImageCompositeMasked keeps unmasked pixels exact. The mask must be an RGB PNG (LoadImageMask reads the red channel). The reference is the original image only (for outpaint, without the stretched border), so the model does not copy the padding.",
+    "megapixels": 1.5,
+    "placeholders": [
+      "image",
+      "mask",
+      "reference",
+      "prompt",
+      "negative",
+      "width",
+      "height",
+      "seed",
+      "ref1 (optional)"
+    ],
+    "optional": {
+      "ref1": {
+        "drop": [
+          "40",
+          "41"
+        ],
+        "bypass": {
+          "42": "conditioning"
+        }
+      }
+    }
+  },
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "flux-2-klein-base-4b-fp8.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "flux2",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "2",
+        0
+      ],
+      "text": "{{prompt}}"
+    }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{image}}"
+    }
+  },
+  "11": {
+    "class_type": "LoadImageMask",
+    "inputs": {
+      "image": "{{mask}}",
+      "channel": "red"
+    }
+  },
+  "14": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "10",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "15": {
+    "class_type": "SetLatentNoiseMask",
+    "inputs": {
+      "samples": [
+        "14",
+        0
+      ],
+      "mask": [
+        "11",
+        0
+      ]
+    }
+  },
+  "16": {
+    "class_type": "DifferentialDiffusion",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ]
+    }
+  },
+  "20": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "5",
+        0
+      ],
+      "latent": [
+        "13",
+        0
+      ]
+    }
+  },
+  "32": {
+    "class_type": "Flux2Scheduler",
+    "inputs": {
+      "steps": 16,
+      "width": "{{width}}",
+      "height": "{{height}}"
+    }
+  },
+  "33": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": "{{seed}}"
+    }
+  },
+  "34": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    }
+  },
+  "36": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "33",
+        0
+      ],
+      "guider": [
+        "35",
+        0
+      ],
+      "sampler": [
+        "34",
+        0
+      ],
+      "sigmas": [
+        "32",
+        0
+      ],
+      "latent_image": [
+        "15",
+        0
+      ]
+    }
+  },
+  "37": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "36",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "39": {
+    "class_type": "ImageCompositeMasked",
+    "inputs": {
+      "destination": [
+        "10",
+        0
+      ],
+      "source": [
+        "37",
+        0
+      ],
+      "x": 0,
+      "y": 0,
+      "resize_source": false,
+      "mask": [
+        "11",
+        0
+      ]
+    }
+  },
+  "38": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "39",
+        0
+      ],
+      "filename_prefix": "ductus/inpaint"
+    }
+  },
+  "12": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{reference}}"
+    }
+  },
+  "13": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "12",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "2",
+        0
+      ],
+      "text": "{{negative}}"
+    }
+  },
+  "21": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "6",
+        0
+      ],
+      "latent": [
+        "13",
+        0
+      ]
+    }
+  },
+  "35": {
+    "class_type": "CFGGuider",
+    "inputs": {
+      "model": [
+        "16",
+        0
+      ],
+      "positive": [
+        "42",
+        0
+      ],
+      "negative": [
+        "21",
+        0
+      ],
+      "cfg": 3.0
+    }
+  },
+  "40": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{ref1}}"
+    }
+  },
+  "41": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "40",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "42": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "20",
+        0
+      ],
+      "latent": [
+        "41",
+        0
+      ]
+    }
+  }
+}
