@@ -38,6 +38,8 @@ Everything is in `%LOCALAPPDATA%\GRAPAI` (for example `C:\Users\you\AppData\Loca
 
 Shortcuts: `GRAPAI` on the Desktop, and a `GRAPAI` folder in the Start menu with **Uninstall GRAPAI**.
 
+The GRAPAI server runs in ComfyUI's own Python (it reuses ComfyUI's GPU build of PyTorch, which saves a 3 GB download). The installer pins ComfyUI to a tested version, so do not update ComfyUI from its own updater: run a newer GRAPAI installer instead.
+
 ## Options
 
 Run the installer from a PowerShell window in the unpacked folder for these:
@@ -50,7 +52,7 @@ Run the installer from a PowerShell window in the unpacked folder for these:
 
 ## Update
 
-Download the newer GRAPAI zip, unpack it, and run `Install-GRAPAI.cmd` again. It updates the app, keeps your boards, and only downloads models that changed. Every model file is checked against its SHA-256 checksum.
+Download the newer GRAPAI zip, unpack it, and run `Install-GRAPAI.cmd` again. It updates the app, keeps your boards, and only downloads models that changed. Every model file is checked against its SHA-256 checksum, and your `settings.ps1` is kept. ComfyUI-GGUF is pinned to a Git commit instead, because GitHub's source zips have no fixed checksum.
 
 ## If something goes wrong
 

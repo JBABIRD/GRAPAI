@@ -90,7 +90,7 @@ function Get-File([string]$url, [string]$dest, [string]$sha256 = "", [long]$size
     for ($attempt = 1; $attempt -le 2; $attempt++) {
         if ($size -le 0) {
             Say "    downloading $name"
-            & curl.exe -L --fail --retry 5 --retry-delay 5 --progress-bar -o $part $url
+            & curl.exe -L --fail --silent --show-error --retry 5 --retry-delay 5 -o $part $url
             if ($LASTEXITCODE -ne 0) { Remove-Item -Force $part -ErrorAction SilentlyContinue; continue }
         } else {
             # Resume from the last whole chunk of an earlier run.
@@ -257,13 +257,18 @@ try {
     Step "Launcher and shortcuts"
     Copy-Item -Force (Join-Path $PSScriptRoot "start.ps1") (Join-Path $InstallDir "Start-GRAPAI.ps1")
     Copy-Item -Force (Join-Path $PSScriptRoot "uninstall.ps1") (Join-Path $InstallDir "Uninstall-GRAPAI.ps1")
-    @"
-# Written by the GRAPAI installer. Edit to change ports or memory mode; run the installer again to reset.
+    $settingsFile = Join-Path $InstallDir "settings.ps1"
+    if (-not (Test-Path $settingsFile)) {
+        @"
+# GRAPAI settings. The installer keeps this file when it updates GRAPAI.
 `$GrapaiPort = 8000
 `$ComfyPort = 8188
 # Set to 1 if ComfyUI runs out of GPU memory (slower, but needs less VRAM). 8 GB works without it.
 `$LowVram = 0
-"@ | Set-Content -Path (Join-Path $InstallDir "settings.ps1")
+"@ | Set-Content -Path $settingsFile
+    }
+    $GrapaiPort = 8000
+    . $settingsFile
 
     if (-not $NoShortcuts) {
         $shell = New-Object -ComObject WScript.Shell
@@ -291,7 +296,9 @@ try {
 
     Step "Done"
     Say "GRAPAI is installed in $InstallDir." "Green"
-    Say "Start it with the GRAPAI shortcut on your Desktop. It opens in your browser at http://localhost:8000."
+    if ($NoShortcuts) { Say "Start it with $(Join-Path $InstallDir 'Start-GRAPAI.ps1')." }
+    else { Say "Start it with the GRAPAI shortcut on your Desktop or in the Start menu." }
+    Say "It opens in your browser at http://localhost:$GrapaiPort."
     if (-not $Yes -and (Ask "Start GRAPAI now?")) {
         Start-Process -FilePath (Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe") `
             -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$(Join-Path $InstallDir 'Start-GRAPAI.ps1')`"")
