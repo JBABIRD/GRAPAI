@@ -80,6 +80,8 @@ $argv = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $installer, "-Ins
 $video = Get-ChildItem -ErrorAction SilentlyContinue (Join-Path $Root "ComfyUI_windows_portable\ComfyUI\models\unet") -Filter "Wan2.2-*"
 if (-not $video) { $argv += "-NoVideo" }
 if ($ComfyProfile -eq "gpu12,laptop") { $argv += @("-Mode", "gpu12") } elseif ($ComfyProfile -eq "laptop") { $argv += @("-Mode", "8gb") }
+# The installer copies a fresh Update-GRAPAI.ps1 over this file. That is safe: PowerShell has already
+# parsed this script, so the running copy is not affected.
 & (Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe") @argv
 $ok = $LASTEXITCODE -eq 0
 Remove-Item -Recurse -Force $src, $zip -ErrorAction SilentlyContinue

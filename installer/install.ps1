@@ -12,7 +12,7 @@
   Options:
     -InstallDir <path>   install somewhere else (must be a folder you can write to)
     -NoVideo             skip the local video model (about 8 GB less to download)
-    -SkipModels          install the app only (models are copied in by hand)
+    -SkipModels          install the app only (models and the 4 GB style reader are copied in by hand)
     -NoShortcuts         do not create Desktop / Start menu shortcuts
     -Mode <auto|8gb|gpu12>  model set: auto picks the 12 GB set (higher-precision models, sharper edits,
                          720p video) on GPUs with about 12 GB or more, else the 8 GB set
@@ -260,10 +260,14 @@ try {
         $size = 0; if ($f.size) { $size = [long]$f.size }
         Get-File $f.url (Join-Path $InstallDir ("data\{0}\{1}" -f $Manifest.birefnet.folder, $f.file)) $f.sha256 $size
     }
-    Step "Style reader for Style transfer (Qwen3-VL 2B)"
-    foreach ($f in $Manifest.style_vlm.files) {
-        $sha = ""; if ($f.sha256) { $sha = $f.sha256 }
-        Get-File $f.url (Join-Path $InstallDir ("data\{0}\{1}" -f $Manifest.style_vlm.folder, $f.file)) $sha ([long]$f.size)
+    if ($SkipModels) {
+        Step "Style reader skipped (-SkipModels)"
+    } else {
+        Step "Style reader for Style transfer (Qwen3-VL 2B)"
+        foreach ($f in $Manifest.style_vlm.files) {
+            $sha = ""; if ($f.sha256) { $sha = $f.sha256 }
+            Get-File $f.url (Join-Path $InstallDir ("data\{0}\{1}" -f $Manifest.style_vlm.folder, $f.file)) $sha ([long]$f.size)
+        }
     }
     $esrgan = Join-Path $InstallDir ("data\models\" + (Split-Path -Leaf $Manifest.esrgan.url))
     Get-File $Manifest.esrgan.url $esrgan $Manifest.esrgan.sha256 ([long]$Manifest.esrgan.size)
