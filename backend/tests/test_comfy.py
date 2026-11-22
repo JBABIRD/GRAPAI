@@ -362,3 +362,10 @@ def test_clean_style_text_drops_content_and_adds_ink():
     assert "signature" not in out and "car" not in out and "blue-gray palette" in out
     assert out.endswith("drawn in strong blue ink like image 2 on white paper")
     assert prompts.clean_style_text(None, {"kind": "color"}) is None
+
+
+def test_clean_style_text_keeps_marker_tones():
+    from ductus.providers import prompts
+    out = prompts.clean_style_text("Alcohol marker rendering with grey tones and an orange accent. Clean outlines.",
+                                   {"kind": "drawing", "colour": "black"})
+    assert "black ink" not in out and out == "Alcohol marker rendering with grey tones and an orange accent; clean outlines"

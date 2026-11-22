@@ -128,8 +128,13 @@ def clean_style_text(text: str | None, info: dict | None = None) -> str | None:
         return None
     parts = re.split(r"(?<=[.;])\s+|,\s+(?=(?:and |with |the |emphasi))", text)
     kept = [p.strip().rstrip(".;,") for p in parts if p.strip() and not CONTENT_WORDS.search(p)]
-    out = ", ".join(kept) if kept else ""
-    if info and info.get("kind") == "drawing":
+    kept = [k[0].lower() + k[1:] if i and k[:1].isupper() and not k[:2].isupper() else k for i, k in enumerate(kept)]
+    out = "; ".join(kept) if kept else ""
+    # The measured ink colour only for line drawings: a marker sheet on paper also reads as 'drawing' and
+    # 'strong black ink' then pushed out its marker tones (laptop test).
+    sketchy = re.search(r"\b(sketch|pen|pencil|ink|ballpoint|line drawing)", out, re.I)
+    painterly = re.search(r"\b(marker|watercolou?r|paint|gouache|accent|colou?rful|vibrant)", out, re.I)
+    if info and info.get("kind") == "drawing" and sketchy and not painterly:
         out = (out + ", " if out else "") + f"drawn in strong {info['colour']} ink like image 2 on white paper"
     return out or None
 
