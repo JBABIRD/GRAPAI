@@ -192,7 +192,7 @@ WORKFLOWS: dict[str, Workflow] = {
                 ParamSpec(name="prompt", kind="text", label="What should be there instead? (optional)", default=""),
                 _MODE, _count(1), _SEED,
             ],
-            model="FLUX.2 klein 4B (inpaint)",
+            model="klein 4B + outpaint LoRA / klein Base 4B + outpaint LoRA",
             license="Apache-2.0",
         ),
         Workflow(
@@ -209,7 +209,7 @@ WORKFLOWS: dict[str, Workflow] = {
                 ParamSpec(name="bottom", kind="number", label="Bottom (px)", default=0, min=0, max=4096, step=8),
                 _MODE, _count(1), _SEED,
             ],
-            model="FLUX.2 klein 4B (inpaint)",
+            model="klein 4B + outpaint LoRA / klein Base 4B + outpaint LoRA",
             license="Apache-2.0",
         ),
         Workflow(
